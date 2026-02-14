@@ -1,15 +1,16 @@
-import { StyleSheet, Text, View, TextInput, FlatList, Pressable, Platform } from "react-native";
+import { StyleSheet, Text, View, TextInput, FlatList, Pressable, Platform, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useState, useMemo } from "react";
 import { router } from "expo-router";
 import { Ionicons, Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { useQuery } from "@tanstack/react-query";
 import Colors from "@/constants/colors";
-import { searchSubjects, allSubjects, getBranchById, Subject } from "@/lib/rgpv-data";
+import type { Subject, Branch } from "@/lib/rgpv-data";
 import { useBookmarks } from "@/lib/bookmarks";
 
-function SubjectResultItem({ subject }: { subject: Subject }) {
-  const branch = getBranchById(subject.branch);
+function SubjectResultItem({ subject, branches }: { subject: Subject; branches: Branch[] }) {
+  const branch = branches.find(b => b.id === subject.branchId);
   const { isBookmarked } = useBookmarks();
   const bookmarked = isBookmarked(subject.id);
 
@@ -30,7 +31,7 @@ function SubjectResultItem({ subject }: { subject: Subject }) {
     >
       <View style={[styles.resultBadge, { backgroundColor: (branch?.color || Colors.primary) + '18' }]}>
         <Text style={[styles.resultBadgeText, { color: branch?.color || Colors.primary }]}>
-          {branch?.shortName || subject.branch.toUpperCase()}
+          {branch?.shortName || subject.branchId?.toUpperCase()}
         </Text>
       </View>
       <View style={styles.resultInfo}>
@@ -50,14 +51,27 @@ export default function SearchScreen() {
   const [query, setQuery] = useState("");
   const webTopInset = Platform.OS === "web" ? 67 : 0;
 
+  const { data: allSubjects = [], isLoading } = useQuery<Subject[]>({
+    queryKey: ["/api/subjects"],
+  });
+
+  const { data: branches = [] } = useQuery<Branch[]>({
+    queryKey: ["/api/branches"],
+  });
+
   const results = useMemo(() => {
     if (!query.trim()) return [];
-    return searchSubjects(query);
-  }, [query]);
+    const q = query.toLowerCase();
+    return allSubjects.filter(s =>
+      s.name.toLowerCase().includes(q) ||
+      s.code.toLowerCase().includes(q) ||
+      s.branchId?.toLowerCase().includes(q)
+    );
+  }, [query, allSubjects]);
 
   const popularSubjects = useMemo(() => {
-    return allSubjects.filter(s => ['cse-3-ds', 'cse-4-dbms', 'cse-4-os', 'cse-5-cn', 'cse-6-ai'].includes(s.id));
-  }, []);
+    return allSubjects.slice(0, 5);
+  }, [allSubjects]);
 
   return (
     <View style={styles.container}>
@@ -82,11 +96,13 @@ export default function SearchScreen() {
         </View>
       </View>
 
-      {query.trim() ? (
+      {isLoading ? (
+        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
+      ) : query.trim() ? (
         <FlatList
           data={results}
           keyExtractor={item => item.id}
-          renderItem={({ item }) => <SubjectResultItem subject={item} />}
+          renderItem={({ item }) => <SubjectResultItem subject={item} branches={branches} />}
           contentContainerStyle={[
             styles.listContent,
             { paddingBottom: Platform.OS === "web" ? 34 + 84 : 100 },
@@ -104,7 +120,7 @@ export default function SearchScreen() {
         <FlatList
           data={popularSubjects}
           keyExtractor={item => item.id}
-          renderItem={({ item }) => <SubjectResultItem subject={item} />}
+          renderItem={({ item }) => <SubjectResultItem subject={item} branches={branches} />}
           contentContainerStyle={[
             styles.listContent,
             { paddingBottom: Platform.OS === "web" ? 34 + 84 : 100 },

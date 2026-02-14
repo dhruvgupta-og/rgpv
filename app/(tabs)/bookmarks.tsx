@@ -1,15 +1,16 @@
-import { StyleSheet, Text, View, FlatList, Pressable, Platform } from "react-native";
+import { StyleSheet, Text, View, FlatList, Pressable, Platform, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Ionicons, Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { useQuery } from "@tanstack/react-query";
 import Colors from "@/constants/colors";
-import { getSubjectById, getBranchById, Subject } from "@/lib/rgpv-data";
+import type { Subject, Branch } from "@/lib/rgpv-data";
 import { useBookmarks } from "@/lib/bookmarks";
 import { useMemo } from "react";
 
-function BookmarkItem({ subject }: { subject: Subject }) {
-  const branch = getBranchById(subject.branch);
+function BookmarkItem({ subject, branches }: { subject: Subject; branches: Branch[] }) {
+  const branch = branches.find(b => b.id === subject.branchId);
   const { toggleBookmark } = useBookmarks();
 
   const handlePress = () => {
@@ -38,7 +39,7 @@ function BookmarkItem({ subject }: { subject: Subject }) {
       <View style={styles.bookmarkInfo}>
         <Text style={styles.bookmarkName} numberOfLines={1}>{subject.name}</Text>
         <Text style={styles.bookmarkMeta}>
-          {branch?.shortName || subject.branch.toUpperCase()} | {subject.code} | Sem {subject.semester}
+          {branch?.shortName || subject.branchId?.toUpperCase()} | {subject.code} | Sem {subject.semester}
         </Text>
       </View>
       <Pressable onPress={handleRemove} hitSlop={10}>
@@ -53,11 +54,19 @@ export default function BookmarksScreen() {
   const { bookmarks } = useBookmarks();
   const webTopInset = Platform.OS === "web" ? 67 : 0;
 
+  const { data: allSubjects = [], isLoading } = useQuery<Subject[]>({
+    queryKey: ["/api/subjects"],
+  });
+
+  const { data: branches = [] } = useQuery<Branch[]>({
+    queryKey: ["/api/branches"],
+  });
+
   const bookmarkedSubjects = useMemo(() => {
     return bookmarks
-      .map(id => getSubjectById(id))
+      .map(id => allSubjects.find(s => s.id === id))
       .filter((s): s is Subject => s !== undefined);
-  }, [bookmarks]);
+  }, [bookmarks, allSubjects]);
 
   return (
     <View style={styles.container}>
@@ -70,27 +79,31 @@ export default function BookmarksScreen() {
         )}
       </View>
 
-      <FlatList
-        data={bookmarkedSubjects}
-        keyExtractor={item => item.id}
-        renderItem={({ item }) => <BookmarkItem subject={item} />}
-        contentContainerStyle={[
-          styles.listContent,
-          { paddingBottom: Platform.OS === "web" ? 34 + 84 : 100 },
-        ]}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIconContainer}>
-              <Ionicons name="bookmark-outline" size={48} color={Colors.textMuted} />
+      {isLoading ? (
+        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
+      ) : (
+        <FlatList
+          data={bookmarkedSubjects}
+          keyExtractor={item => item.id}
+          renderItem={({ item }) => <BookmarkItem subject={item} branches={branches} />}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: Platform.OS === "web" ? 34 + 84 : 100 },
+          ]}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIconContainer}>
+                <Ionicons name="bookmark-outline" size={48} color={Colors.textMuted} />
+              </View>
+              <Text style={styles.emptyTitle}>No saved subjects</Text>
+              <Text style={styles.emptySubtext}>
+                Tap the bookmark icon on any subject to save it here for quick access
+              </Text>
             </View>
-            <Text style={styles.emptyTitle}>No saved subjects</Text>
-            <Text style={styles.emptySubtext}>
-              Tap the bookmark icon on any subject to save it here for quick access
-            </Text>
-          </View>
-        }
-      />
+          }
+        />
+      )}
     </View>
   );
 }

@@ -1,17 +1,19 @@
-import { StyleSheet, Text, View, ScrollView, Pressable, Platform, Alert } from "react-native";
+import { StyleSheet, Text, View, ScrollView, Pressable, Platform, Alert, ActivityIndicator, Linking } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { useState } from "react";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown } from "react-native-reanimated";
+import { useQuery } from "@tanstack/react-query";
 import Colors from "@/constants/colors";
-import { getSubjectById, getBranchById } from "@/lib/rgpv-data";
+import type { Branch, Subject, SyllabusUnit, Paper } from "@/lib/rgpv-data";
 import { useBookmarks } from "@/lib/bookmarks";
+import { getApiUrl } from "@/lib/query-client";
 
 type TabType = "syllabus" | "papers";
 
-function SyllabusUnitCard({ unit, index }: { unit: { unit: number; title: string; topics: string[] }; index: number }) {
+function SyllabusUnitCard({ unit, index }: { unit: SyllabusUnit; index: number }) {
   const [expanded, setExpanded] = useState(index === 0);
 
   return (
@@ -25,14 +27,14 @@ function SyllabusUnitCard({ unit, index }: { unit: { unit: number; title: string
       >
         <View style={styles.unitHeader}>
           <View style={styles.unitBadge}>
-            <Text style={styles.unitBadgeText}>{unit.unit}</Text>
+            <Text style={styles.unitBadgeText}>{unit.unitNumber}</Text>
           </View>
           <Text style={styles.unitTitle}>{unit.title}</Text>
           <Feather name={expanded ? "chevron-up" : "chevron-down"} size={18} color={Colors.textMuted} />
         </View>
         {expanded && (
           <View style={styles.topicsList}>
-            {unit.topics.map((topic, i) => (
+            {(unit.topics || []).map((topic, i) => (
               <View key={i} style={styles.topicRow}>
                 <View style={styles.topicDot} />
                 <Text style={styles.topicText}>{topic}</Text>
@@ -45,18 +47,23 @@ function SyllabusUnitCard({ unit, index }: { unit: { unit: number; title: string
   );
 }
 
-function PaperCard({ paper, index, subjectName }: { paper: { id: string; year: string; month: string; type: string }; index: number; subjectName: string }) {
-  const isMain = paper.type === "Main";
+function PaperCard({ paper, index, subjectName }: { paper: Paper; index: number; subjectName: string }) {
+  const isMain = paper.examType === "Main";
 
   const handlePress = () => {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    Alert.alert(
-      `${subjectName}`,
-      `${paper.month} ${paper.year} (${paper.type} Exam)\n\nPaper will be available for download soon. Stay tuned!`,
-      [{ text: "OK" }]
-    );
+    if (paper.pdfPath) {
+      const pdfUrl = getApiUrl() + paper.pdfPath.replace(/^\//, '');
+      Linking.openURL(pdfUrl);
+    } else {
+      Alert.alert(
+        `${subjectName}`,
+        `${paper.month} ${paper.year} (${paper.examType} Exam)\n\nPaper PDF not uploaded yet. Stay tuned!`,
+        [{ text: "OK" }]
+      );
+    }
   };
 
   return (
@@ -75,24 +82,49 @@ function PaperCard({ paper, index, subjectName }: { paper: { id: string; year: s
           <Text style={styles.paperTitle}>{paper.month} {paper.year}</Text>
           <View style={styles.paperMeta}>
             <View style={[styles.typeBadge, { backgroundColor: isMain ? Colors.accent + '20' : Colors.warning + '20' }]}>
-              <Text style={[styles.typeText, { color: isMain ? Colors.accent : Colors.warning }]}>{paper.type}</Text>
+              <Text style={[styles.typeText, { color: isMain ? Colors.accent : Colors.warning }]}>{paper.examType}</Text>
             </View>
+            {paper.pdfPath ? (
+              <View style={[styles.typeBadge, { backgroundColor: Colors.accent + '20' }]}>
+                <Text style={[styles.typeText, { color: Colors.accent }]}>PDF</Text>
+              </View>
+            ) : null}
           </View>
         </View>
-        <Feather name="download" size={18} color={Colors.primary} />
+        <Feather name={paper.pdfPath ? "download" : "clock"} size={18} color={paper.pdfPath ? Colors.primary : Colors.textMuted} />
       </Pressable>
     </Animated.View>
   );
 }
 
+interface SubjectDetail extends Subject {
+  syllabus: SyllabusUnit[];
+  papers: Paper[];
+}
+
 export default function SubjectScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
-  const subject = getSubjectById(id);
-  const branch = subject ? getBranchById(subject.branch) : undefined;
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const [activeTab, setActiveTab] = useState<TabType>("syllabus");
   const webTopInset = Platform.OS === "web" ? 67 : 0;
+
+  const { data: subject, isLoading } = useQuery<SubjectDetail>({
+    queryKey: ["/api/subjects", id],
+  });
+
+  const { data: branch } = useQuery<Branch>({
+    queryKey: ["/api/branches", subject?.branchId],
+    enabled: !!subject?.branchId,
+  });
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
 
   if (!subject) {
     return (
@@ -103,6 +135,8 @@ export default function SubjectScreen() {
   }
 
   const bookmarked = isBookmarked(subject.id);
+  const syllabus = subject.syllabus || [];
+  const papers = subject.papers || [];
 
   const handleBookmark = () => {
     if (Platform.OS !== "web") {
@@ -141,7 +175,7 @@ export default function SubjectScreen() {
           <View style={styles.metaRow}>
             <View style={[styles.metaChip, { backgroundColor: (branch?.color || Colors.primary) + '18' }]}>
               <Text style={[styles.metaChipText, { color: branch?.color || Colors.primary }]}>
-                {branch?.shortName || subject.branch.toUpperCase()}
+                {branch?.shortName || subject.branchId?.toUpperCase()}
               </Text>
             </View>
             <View style={styles.metaChip}>
@@ -172,21 +206,29 @@ export default function SubjectScreen() {
           >
             <Feather name="file-text" size={16} color={activeTab === "papers" ? Colors.primary : Colors.textMuted} />
             <Text style={[styles.tabText, activeTab === "papers" && styles.tabTextActive]}>
-              Papers ({subject.papers.length})
+              Papers ({papers.length})
             </Text>
           </Pressable>
         </View>
 
         {activeTab === "syllabus" ? (
           <View style={styles.contentList}>
-            {subject.syllabus.map((unit, i) => (
-              <SyllabusUnitCard key={unit.unit} unit={unit} index={i} />
-            ))}
+            {syllabus.length > 0 ? (
+              syllabus.map((unit, i) => (
+                <SyllabusUnitCard key={unit.id || i} unit={unit} index={i} />
+              ))
+            ) : (
+              <View style={styles.emptyPapers}>
+                <Feather name="layers" size={40} color={Colors.textMuted} />
+                <Text style={styles.emptyTitle}>No syllabus available</Text>
+                <Text style={styles.emptySubtext}>Syllabus will be added soon</Text>
+              </View>
+            )}
           </View>
         ) : (
           <View style={styles.contentList}>
-            {subject.papers.length > 0 ? (
-              subject.papers.map((paper, i) => (
+            {papers.length > 0 ? (
+              papers.map((paper, i) => (
                 <PaperCard key={paper.id} paper={paper} index={i} subjectName={subject.name} />
               ))
             ) : (

@@ -1,11 +1,12 @@
-import { StyleSheet, Text, View, ScrollView, Pressable, Platform } from "react-native";
+import { StyleSheet, Text, View, ScrollView, Pressable, Platform, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { useState, useMemo } from "react";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { useQuery } from "@tanstack/react-query";
 import Colors from "@/constants/colors";
-import { getBranchById, getSubjectsByBranchAndSemester, getAvailableSemesters, Subject } from "@/lib/rgpv-data";
+import type { Branch, Subject } from "@/lib/rgpv-data";
 import { useBookmarks } from "@/lib/bookmarks";
 
 function SemesterPill({ semester, isSelected, onPress }: { semester: number; isSelected: boolean; onPress: () => void }) {
@@ -67,14 +68,6 @@ function SubjectCard({ subject, branchColor }: { subject: Subject; branchColor: 
       </View>
       <Text style={styles.subjectName}>{subject.name}</Text>
       <View style={styles.subjectBottom}>
-        <View style={styles.subjectStat}>
-          <Feather name="layers" size={13} color={Colors.textMuted} />
-          <Text style={styles.subjectStatText}>{subject.syllabus.length} Units</Text>
-        </View>
-        <View style={styles.subjectStat}>
-          <Feather name="file-text" size={13} color={Colors.textMuted} />
-          <Text style={styles.subjectStatText}>{subject.papers.length} Papers</Text>
-        </View>
         <Feather name="arrow-right" size={16} color={Colors.primary} />
       </View>
     </Pressable>
@@ -84,15 +77,37 @@ function SubjectCard({ subject, branchColor }: { subject: Subject; branchColor: 
 export default function BranchScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
-  const branch = getBranchById(id);
-  const semesters = useMemo(() => getAvailableSemesters(id), [id]);
-  const [selectedSem, setSelectedSem] = useState(semesters[0] || 3);
   const webTopInset = Platform.OS === "web" ? 67 : 0;
 
-  const subjects = useMemo(
-    () => getSubjectsByBranchAndSemester(id, selectedSem),
-    [id, selectedSem]
+  const { data: branch, isLoading: branchLoading } = useQuery<Branch>({
+    queryKey: ["/api/branches", id],
+  });
+
+  const { data: allSubjects = [], isLoading: subjectsLoading } = useQuery<Subject[]>({
+    queryKey: ["/api/subjects?branch=" + id],
+  });
+
+  const semesters = useMemo(() => {
+    const sems = [...new Set(allSubjects.map(s => s.semester))].sort((a, b) => a - b);
+    return sems.length > 0 ? sems : [3];
+  }, [allSubjects]);
+
+  const [selectedSem, setSelectedSem] = useState<number | null>(null);
+
+  const currentSem = selectedSem ?? semesters[0] ?? 3;
+
+  const filteredSubjects = useMemo(
+    () => allSubjects.filter(s => s.semester === currentSem),
+    [allSubjects, currentSem]
   );
+
+  if (branchLoading) {
+    return (
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
 
   if (!branch) {
     return (
@@ -132,7 +147,7 @@ export default function BranchScreen() {
           <SemesterPill
             key={sem}
             semester={sem}
-            isSelected={sem === selectedSem}
+            isSelected={sem === currentSem}
             onPress={() => handleSemSelect(sem)}
           />
         ))}
@@ -145,9 +160,11 @@ export default function BranchScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {subjects.length > 0 ? (
+        {subjectsLoading ? (
+          <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
+        ) : filteredSubjects.length > 0 ? (
           <View style={styles.subjectList}>
-            {subjects.map(subject => (
+            {filteredSubjects.map(subject => (
               <SubjectCard
                 key={subject.id}
                 subject={subject}
@@ -277,16 +294,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 16,
     marginTop: 2,
-  },
-  subjectStat: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  subjectStatText: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 12,
-    color: Colors.textMuted,
   },
   emptyState: {
     alignItems: "center",

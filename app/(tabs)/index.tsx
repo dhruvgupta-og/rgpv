@@ -1,13 +1,14 @@
-import { StyleSheet, Text, View, ScrollView, Pressable, Platform } from "react-native";
+import { StyleSheet, Text, View, ScrollView, Pressable, Platform, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
+import { useQuery } from "@tanstack/react-query";
 import Colors from "@/constants/colors";
-import { branches } from "@/lib/rgpv-data";
+import type { Branch } from "@/lib/rgpv-data";
 
-function BranchCard({ branch, index }: { branch: typeof branches[0]; index: number }) {
+function BranchCard({ branch, index }: { branch: Branch; index: number }) {
   const handlePress = () => {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -16,6 +17,7 @@ function BranchCard({ branch, index }: { branch: typeof branches[0]; index: numb
   };
 
   const iconMap: Record<string, any> = {
+    monitor: <Feather name="monitor" size={26} color={branch.color} />,
     laptop: <Feather name="monitor" size={26} color={branch.color} />,
     cpu: <Feather name="cpu" size={26} color={branch.color} />,
     settings: <Feather name="settings" size={26} color={branch.color} />,
@@ -50,6 +52,10 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const webTopInset = Platform.OS === "web" ? 67 : 0;
 
+  const { data: branches = [], isLoading } = useQuery<Branch[]>({
+    queryKey: ["/api/branches"],
+  });
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -83,7 +89,7 @@ export default function HomeScreen() {
 
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>8</Text>
+            <Text style={styles.statNumber}>{branches.length}</Text>
             <Text style={styles.statLabel}>Branches</Text>
           </View>
           <View style={styles.statDivider} />
@@ -103,11 +109,15 @@ export default function HomeScreen() {
           <Text style={styles.sectionSubtitle}>Choose your engineering discipline</Text>
         </View>
 
-        <View style={styles.branchList}>
-          {branches.map((branch, index) => (
-            <BranchCard key={branch.id} branch={branch} index={index} />
-          ))}
-        </View>
+        {isLoading ? (
+          <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
+        ) : (
+          <View style={styles.branchList}>
+            {branches.map((branch, index) => (
+              <BranchCard key={branch.id} branch={branch} index={index} />
+            ))}
+          </View>
+        )}
       </ScrollView>
     </View>
   );
