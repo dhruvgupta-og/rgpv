@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RGPV Papers - Admin Panel</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0A1628; --bg-light: #111D32; --card: #162036; --card-light: #1C2A45;
+      --border: #243352; --primary: #0EA5E9; --primary-dark: #0284C7;
+      --accent: #06D6A0; --text: #F0F4F8; --text-sec: #94A3B8; --text-muted: #64748B;
+      --danger: #EF4444; --warning: #F59E0B; --success: #10B981;
+    }
+    body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    .sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: 240px; background: var(--bg-light); border-right: 1px solid var(--border); padding: 20px 0; z-index: 10; display: flex; flex-direction: column; }
+    .sidebar-logo { padding: 0 20px 20px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+    .sidebar-logo h2 { color: var(--primary); font-size: 18px; }
+    .sidebar-logo small { color: var(--text-muted); font-size: 12px; }
+    .nav-item { padding: 12px 20px; cursor: pointer; color: var(--text-sec); font-size: 14px; display: flex; align-items: center; gap: 10px; transition: all 0.15s; border-left: 3px solid transparent; }
+    .nav-item:hover { background: var(--card); color: var(--text); }
+    .nav-item.active { background: var(--primary)15; color: var(--primary); border-left-color: var(--primary); font-weight: 600; }
+    .nav-item svg { width: 18px; height: 18px; }
+    .main { margin-left: 240px; padding: 24px 32px; min-height: 100vh; }
+    .page-header { margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+    .page-header h1 { font-size: 24px; font-weight: 700; }
+    .page-header p { color: var(--text-muted); font-size: 14px; margin-top: 4px; }
+    .btn { padding: 10px 18px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-sec); }
+    .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+    .btn-success { background: var(--success); color: #fff; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .card-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .card-header h3 { font-size: 16px; font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 12px 16px; font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+    td { padding: 12px 16px; font-size: 14px; border-bottom: 1px solid var(--border); color: var(--text-sec); }
+    tr:hover td { background: var(--bg-light); }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+    .badge-primary { background: var(--primary)20; color: var(--primary); }
+    .badge-success { background: var(--success)20; color: var(--success); }
+    .badge-warning { background: var(--warning)20; color: var(--warning); }
+    .badge-danger { background: var(--danger)20; color: var(--danger); }
+    .color-dot { width: 14px; height: 14px; border-radius: 4px; display: inline-block; vertical-align: middle; margin-right: 6px; }
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100; align-items: center; justify-content: center; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: var(--card); border: 1px solid var(--border); border-radius: 16px; width: 560px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+    .modal-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .modal-header h3 { font-size: 18px; }
+    .modal-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 24px; line-height: 1; }
+    .modal-body { padding: 24px; }
+    .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+    .form-group { margin-bottom: 18px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 600; color: var(--text-sec); margin-bottom: 6px; }
+    .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px 14px; background: var(--bg-light); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; font-family: inherit; outline: none; transition: border-color 0.15s; }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--primary); }
+    .form-group textarea { resize: vertical; min-height: 80px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+    .stat-card .stat-number { font-size: 28px; font-weight: 700; color: var(--primary); }
+    .stat-card .stat-label { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+    .topic-tag { display: inline-block; background: var(--bg-light); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; font-size: 12px; color: var(--text-sec); margin: 2px; }
+    .empty-state { padding: 60px 20px; text-align: center; color: var(--text-muted); }
+    .empty-state svg { width: 48px; height: 48px; margin-bottom: 12px; opacity: 0.5; }
+    .empty-state p { font-size: 14px; }
+    .toast { position: fixed; bottom: 24px; right: 24px; padding: 14px 20px; border-radius: 10px; font-size: 14px; font-weight: 500; z-index: 200; animation: slideIn 0.3s; color: #fff; }
+    .toast.success { background: var(--success); }
+    .toast.error { background: var(--danger); }
+    @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .actions-cell { display: flex; gap: 6px; }
+    .pdf-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+    .pdf-yes { background: var(--success)20; color: var(--success); }
+    .pdf-no { background: var(--danger)20; color: var(--danger); }
+    .section { display: none; }
+    .section.active { display: block; }
+    .seed-banner { background: var(--warning)15; border: 1px solid var(--warning)40; border-radius: 10px; padding: 16px 20px; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; }
+    .seed-banner span { color: var(--warning); font-size: 14px; }
+    @media (max-width: 768px) {
+      .sidebar { width: 60px; }
+      .sidebar-logo h2, .sidebar-logo small, .nav-item span { display: none; }
+      .main { margin-left: 60px; padding: 16px; }
+      .form-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <div class="sidebar-logo">
+      <h2>RGPV Papers</h2>
+      <small>Admin Panel</small>
+    </div>
+    <div class="nav-item active" onclick="showSection('dashboard')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <span>Dashboard</span>
+    </div>
+    <div class="nav-item" onclick="showSection('branches')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      <span>Branches</span>
+    </div>
+    <div class="nav-item" onclick="showSection('subjects')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+      <span>Subjects</span>
+    </div>
+    <div class="nav-item" onclick="showSection('syllabus')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      <span>Syllabus</span>
+    </div>
+    <div class="nav-item" onclick="showSection('papers')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      <span>Papers & PDFs</span>
+    </div>
+  </div>
+
+  <div class="main">
+    <!-- DASHBOARD -->
+    <div id="section-dashboard" class="section active">
+      <div class="page-header">
+        <div>
+          <h1>Dashboard</h1>
+          <p>Overview of your RGPV Papers data</p>
+        </div>
+        <button class="btn btn-primary" onclick="seedData()">Seed Sample Data</button>
+      </div>
+      <div id="seed-banner" class="seed-banner" style="display:none;">
+        <span>Your database is empty. Click "Seed Sample Data" above to add starter data for branches, subjects, syllabus, and papers.</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-number" id="stat-branches">0</div><div class="stat-label">Branches</div></div>
+        <div class="stat-card"><div class="stat-number" id="stat-subjects">0</div><div class="stat-label">Subjects</div></div>
+        <div class="stat-card"><div class="stat-number" id="stat-papers">0</div><div class="stat-label">Question Papers</div></div>
+      </div>
+    </div>
+
+    <!-- BRANCHES -->
+    <div id="section-branches" class="section">
+      <div class="page-header">
+        <div><h1>Branches</h1><p>Manage engineering branches</p></div>
+        <button class="btn btn-primary" onclick="openBranchModal()">+ Add Branch</button>
+      </div>
+      <div class="card"><table><thead><tr><th>Color</th><th>Short</th><th>Full Name</th><th>Icon</th><th>Actions</th></tr></thead><tbody id="branches-table"></tbody></table></div>
+    </div>
+
+    <!-- SUBJECTS -->
+    <div id="section-subjects" class="section">
+      <div class="page-header">
+        <div><h1>Subjects</h1><p>Manage subjects across all branches</p></div>
+        <button class="btn btn-primary" onclick="openSubjectModal()">+ Add Subject</button>
+      </div>
+      <div style="margin-bottom: 16px; display: flex; gap: 10px; flex-wrap: wrap;">
+        <select id="filter-branch" onchange="loadSubjects()" style="padding:8px 12px; background:var(--card); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:14px;">
+          <option value="">All Branches</option>
+        </select>
+        <select id="filter-semester" onchange="loadSubjects()" style="padding:8px 12px; background:var(--card); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:14px;">
+          <option value="">All Semesters</option>
+          <option value="1">Sem 1</option><option value="2">Sem 2</option><option value="3">Sem 3</option><option value="4">Sem 4</option>
+          <option value="5">Sem 5</option><option value="6">Sem 6</option><option value="7">Sem 7</option><option value="8">Sem 8</option>
+        </select>
+      </div>
+      <div class="card"><table><thead><tr><th>Code</th><th>Name</th><th>Branch</th><th>Semester</th><th>Actions</th></tr></thead><tbody id="subjects-table"></tbody></table></div>
+    </div>
+
+    <!-- SYLLABUS -->
+    <div id="section-syllabus" class="section">
+      <div class="page-header">
+        <div><h1>Syllabus</h1><p>Manage unit-wise syllabus for subjects</p></div>
+        <button class="btn btn-primary" onclick="openSyllabusModal()">+ Add Unit</button>
+      </div>
+      <div style="margin-bottom:16px;">
+        <select id="syllabus-subject-filter" onchange="loadSyllabus()" style="padding:8px 12px; background:var(--card); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:14px; min-width: 300px;">
+          <option value="">Select a subject</option>
+        </select>
+      </div>
+      <div class="card"><table><thead><tr><th>Unit</th><th>Title</th><th>Topics</th><th>Actions</th></tr></thead><tbody id="syllabus-table"></tbody></table></div>
+    </div>
+
+    <!-- PAPERS -->
+    <div id="section-papers" class="section">
+      <div class="page-header">
+        <div><h1>Question Papers</h1><p>Manage papers and upload PDFs</p></div>
+        <button class="btn btn-primary" onclick="openPaperModal()">+ Add Paper</button>
+      </div>
+      <div style="margin-bottom:16px;">
+        <select id="paper-subject-filter" onchange="loadPapers()" style="padding:8px 12px; background:var(--card); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:14px; min-width: 300px;">
+          <option value="">All Papers</option>
+        </select>
+      </div>
+      <div class="card"><table><thead><tr><th>Subject</th><th>Year</th><th>Month</th><th>Type</th><th>PDF</th><th>Actions</th></tr></thead><tbody id="papers-table"></tbody></table></div>
+    </div>
+  </div>
+
+  <!-- BRANCH MODAL -->
+  <div class="modal-overlay" id="branch-modal">
+    <div class="modal">
+      <div class="modal-header"><h3 id="branch-modal-title">Add Branch</h3><button class="modal-close" onclick="closeModal('branch-modal')">&times;</button></div>
+      <div class="modal-body">
+        <input type="hidden" id="branch-edit-id">
+        <div class="form-row">
+          <div class="form-group"><label>Branch ID (e.g. cse)</label><input type="text" id="branch-id" placeholder="cse"></div>
+          <div class="form-group"><label>Short Name</label><input type="text" id="branch-short" placeholder="CSE"></div>
+        </div>
+        <div class="form-group"><label>Full Name</label><input type="text" id="branch-name" placeholder="Computer Science & Engineering"></div>
+        <div class="form-row">
+          <div class="form-group"><label>Icon (Feather icon name)</label><input type="text" id="branch-icon" placeholder="monitor" value="monitor"></div>
+          <div class="form-group"><label>Color (hex)</label><input type="color" id="branch-color" value="#0EA5E9"></div>
+        </div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('branch-modal')">Cancel</button><button class="btn btn-primary" onclick="saveBranch()">Save</button></div>
+    </div>
+  </div>
+
+  <!-- SUBJECT MODAL -->
+  <div class="modal-overlay" id="subject-modal">
+    <div class="modal">
+      <div class="modal-header"><h3 id="subject-modal-title">Add Subject</h3><button class="modal-close" onclick="closeModal('subject-modal')">&times;</button></div>
+      <div class="modal-body">
+        <input type="hidden" id="subject-edit-id">
+        <div class="form-group"><label>Subject ID (e.g. cse-3-ds)</label><input type="text" id="subject-id" placeholder="cse-3-ds"></div>
+        <div class="form-group"><label>Subject Name</label><input type="text" id="subject-name" placeholder="Data Structures"></div>
+        <div class="form-row">
+          <div class="form-group"><label>Code</label><input type="text" id="subject-code" placeholder="CS-304"></div>
+          <div class="form-group"><label>Semester</label><select id="subject-semester"><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option></select></div>
+        </div>
+        <div class="form-group"><label>Branch</label><select id="subject-branch"></select></div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('subject-modal')">Cancel</button><button class="btn btn-primary" onclick="saveSubject()">Save</button></div>
+    </div>
+  </div>
+
+  <!-- SYLLABUS MODAL -->
+  <div class="modal-overlay" id="syllabus-modal">
+    <div class="modal">
+      <div class="modal-header"><h3 id="syllabus-modal-title">Add Syllabus Unit</h3><button class="modal-close" onclick="closeModal('syllabus-modal')">&times;</button></div>
+      <div class="modal-body">
+        <input type="hidden" id="syllabus-edit-id">
+        <div class="form-group"><label>Subject</label><select id="syllabus-subject"></select></div>
+        <div class="form-row">
+          <div class="form-group"><label>Unit Number</label><input type="number" id="syllabus-unit" min="1" max="10" value="1"></div>
+          <div class="form-group"><label>Unit Title</label><input type="text" id="syllabus-title" placeholder="Introduction"></div>
+        </div>
+        <div class="form-group"><label>Topics (one per line)</label><textarea id="syllabus-topics" placeholder="Topic 1&#10;Topic 2&#10;Topic 3" rows="6"></textarea></div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('syllabus-modal')">Cancel</button><button class="btn btn-primary" onclick="saveSyllabus()">Save</button></div>
+    </div>
+  </div>
+
+  <!-- PAPER MODAL -->
+  <div class="modal-overlay" id="paper-modal">
+    <div class="modal">
+      <div class="modal-header"><h3 id="paper-modal-title">Add Paper</h3><button class="modal-close" onclick="closeModal('paper-modal')">&times;</button></div>
+      <div class="modal-body">
+        <input type="hidden" id="paper-edit-id">
+        <div class="form-group"><label>Subject</label><select id="paper-subject"></select></div>
+        <div class="form-row">
+          <div class="form-group"><label>Year</label><input type="text" id="paper-year" placeholder="2024"></div>
+          <div class="form-group"><label>Month</label><select id="paper-month"><option>Jan</option><option>Feb</option><option>Mar</option><option>Apr</option><option>May</option><option value="Jun">Jun</option><option>Jul</option><option>Aug</option><option>Sep</option><option>Oct</option><option>Nov</option><option value="Dec" selected>Dec</option></select></div>
+        </div>
+        <div class="form-group"><label>Exam Type</label><select id="paper-type"><option value="Main">Main</option><option value="Supply">Supplementary</option><option value="Back">Back</option></select></div>
+        <div class="form-group"><label>Upload PDF (max 20MB)</label><input type="file" id="paper-pdf" accept="application/pdf" style="padding:8px;"></div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('paper-modal')">Cancel</button><button class="btn btn-primary" onclick="savePaper()">Save</button></div>
+    </div>
+  </div>
+
+  <script>
+    let allBranches = [], allSubjects = [], allPapers = [];
+    const API = '';
+
+    async function api(url, opts = {}) {
+      const res = await fetch(API + url, opts);
+      if (!res.ok) { const e = await res.text(); throw new Error(e); }
+      return res.json();
+    }
+
+    function toast(msg, type = 'success') {
+      const el = document.createElement('div');
+      el.className = 'toast ' + type;
+      el.textContent = msg;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 3000);
+    }
+
+    function showSection(name) {
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      document.getElementById('section-' + name).classList.add('active');
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      event.currentTarget.classList.add('active');
+      if (name === 'dashboard') loadDashboard();
+      if (name === 'branches') loadBranches();
+      if (name === 'subjects') loadSubjects();
+      if (name === 'syllabus') { populateSubjectDropdowns(); loadSyllabus(); }
+      if (name === 'papers') { populateSubjectDropdowns(); loadPapers(); }
+    }
+
+    function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+    function openModal(id) { document.getElementById(id).classList.add('open'); }
+
+    async function loadDashboard() {
+      try {
+        const [branches, subjects, papers] = await Promise.all([
+          api('/api/branches'), api('/api/subjects'), api('/api/papers')
+        ]);
+        allBranches = branches; allSubjects = subjects; allPapers = papers;
+        document.getElementById('stat-branches').textContent = branches.length;
+        document.getElementById('stat-subjects').textContent = subjects.length;
+        document.getElementById('stat-papers').textContent = papers.length;
+        document.getElementById('seed-banner').style.display = branches.length === 0 ? 'flex' : 'none';
+      } catch (e) { console.error(e); }
+    }
+
+    async function seedData() {
+      try {
+        const res = await api('/api/seed', { method: 'POST' });
+        toast(res.message || 'Data seeded!');
+        loadDashboard();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    // ---- BRANCHES ----
+    async function loadBranches() {
+      try {
+        allBranches = await api('/api/branches');
+        const tbody = document.getElementById('branches-table');
+        if (allBranches.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state"><p>No branches yet. Add one!</p></div></td></tr>';
+          return;
+        }
+        tbody.innerHTML = allBranches.map(b => `<tr>
+          <td><span class="color-dot" style="background:${b.color}"></span>${b.color}</td>
+          <td><strong>${b.shortName}</strong></td>
+          <td>${b.name}</td>
+          <td>${b.icon}</td>
+          <td class="actions-cell">
+            <button class="btn btn-outline btn-sm" onclick="editBranch('${b.id}')">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteBranch('${b.id}')">Delete</button>
+          </td>
+        </tr>`).join('');
+        populateBranchFilters();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function openBranchModal(branch) {
+      document.getElementById('branch-modal-title').textContent = branch ? 'Edit Branch' : 'Add Branch';
+      document.getElementById('branch-edit-id').value = branch ? branch.id : '';
+      document.getElementById('branch-id').value = branch ? branch.id : '';
+      document.getElementById('branch-id').disabled = !!branch;
+      document.getElementById('branch-short').value = branch ? branch.shortName : '';
+      document.getElementById('branch-name').value = branch ? branch.name : '';
+      document.getElementById('branch-icon').value = branch ? branch.icon : 'monitor';
+      document.getElementById('branch-color').value = branch ? branch.color : '#0EA5E9';
+      openModal('branch-modal');
+    }
+
+    async function editBranch(id) {
+      const branch = allBranches.find(b => b.id === id);
+      if (branch) openBranchModal(branch);
+    }
+
+    async function saveBranch() {
+      const editId = document.getElementById('branch-edit-id').value;
+      const data = {
+        id: document.getElementById('branch-id').value.trim().toLowerCase(),
+        name: document.getElementById('branch-name').value.trim(),
+        shortName: document.getElementById('branch-short').value.trim(),
+        icon: document.getElementById('branch-icon').value.trim(),
+        color: document.getElementById('branch-color').value,
+      };
+      if (!data.id || !data.name || !data.shortName) { toast('Fill all required fields', 'error'); return; }
+      try {
+        if (editId) {
+          await api('/api/branches/' + editId, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+          toast('Branch updated');
+        } else {
+          await api('/api/branches', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+          toast('Branch created');
+        }
+        closeModal('branch-modal');
+        loadBranches();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function deleteBranch(id) {
+      if (!confirm('Delete this branch? This cannot be undone.')) return;
+      try {
+        await api('/api/branches/' + id, { method: 'DELETE' });
+        toast('Branch deleted');
+        loadBranches();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    // ---- SUBJECTS ----
+    function populateBranchFilters() {
+      const filterSelect = document.getElementById('filter-branch');
+      const subjectBranchSelect = document.getElementById('subject-branch');
+      const opts = allBranches.map(b => `<option value="${b.id}">${b.shortName} - ${b.name}</option>`).join('');
+      filterSelect.innerHTML = '<option value="">All Branches</option>' + opts;
+      subjectBranchSelect.innerHTML = opts;
+    }
+
+    async function loadSubjects() {
+      try {
+        const branch = document.getElementById('filter-branch').value;
+        const semester = document.getElementById('filter-semester').value;
+        let url = '/api/subjects';
+        const params = [];
+        if (branch) params.push('branch=' + branch);
+        if (semester) params.push('semester=' + semester);
+        if (params.length) url += '?' + params.join('&');
+        allSubjects = await api(url);
+        const tbody = document.getElementById('subjects-table');
+        if (allSubjects.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state"><p>No subjects found.</p></div></td></tr>';
+          return;
+        }
+        tbody.innerHTML = allSubjects.map(s => {
+          const branch = allBranches.find(b => b.id === s.branchId);
+          return `<tr>
+            <td><span class="badge badge-primary">${s.code}</span></td>
+            <td><strong>${s.name}</strong></td>
+            <td>${branch ? branch.shortName : s.branchId}</td>
+            <td>Sem ${s.semester}</td>
+            <td class="actions-cell">
+              <button class="btn btn-outline btn-sm" onclick="editSubject('${s.id}')">Edit</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteSubject('${s.id}')">Delete</button>
+            </td>
+          </tr>`;
+        }).join('');
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function openSubjectModal(subject) {
+      document.getElementById('subject-modal-title').textContent = subject ? 'Edit Subject' : 'Add Subject';
+      document.getElementById('subject-edit-id').value = subject ? subject.id : '';
+      document.getElementById('subject-id').value = subject ? subject.id : '';
+      document.getElementById('subject-id').disabled = !!subject;
+      document.getElementById('subject-name').value = subject ? subject.name : '';
+      document.getElementById('subject-code').value = subject ? subject.code : '';
+      document.getElementById('subject-semester').value = subject ? subject.semester : '3';
+      document.getElementById('subject-branch').value = subject ? subject.branchId : (allBranches[0]?.id || '');
+      openModal('subject-modal');
+    }
+
+    async function editSubject(id) {
+      const subject = allSubjects.find(s => s.id === id);
+      if (subject) openSubjectModal(subject);
+    }
+
+    async function saveSubject() {
+      const editId = document.getElementById('subject-edit-id').value;
+      const data = {
+        id: document.getElementById('subject-id').value.trim(),
+        name: document.getElementById('subject-name').value.trim(),
+        code: document.getElementById('subject-code').value.trim(),
+        semester: parseInt(document.getElementById('subject-semester').value),
+        branchId: document.getElementById('subject-branch').value,
+      };
+      if (!data.id || !data.name || !data.code) { toast('Fill all required fields', 'error'); return; }
+      try {
+        if (editId) {
+          await api('/api/subjects/' + editId, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+          toast('Subject updated');
+        } else {
+          await api('/api/subjects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+          toast('Subject created');
+        }
+        closeModal('subject-modal');
+        loadSubjects();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function deleteSubject(id) {
+      if (!confirm('Delete this subject and all its syllabus/papers? This cannot be undone.')) return;
+      try {
+        await api('/api/subjects/' + id, { method: 'DELETE' });
+        toast('Subject deleted');
+        loadSubjects();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    // ---- SYLLABUS ----
+    function populateSubjectDropdowns() {
+      api('/api/subjects').then(subjects => {
+        allSubjects = subjects;
+        const opts = subjects.map(s => `<option value="${s.id}">${s.code} - ${s.name}</option>`).join('');
+        document.getElementById('syllabus-subject-filter').innerHTML = '<option value="">Select a subject</option>' + opts;
+        document.getElementById('syllabus-subject').innerHTML = opts;
+        document.getElementById('paper-subject-filter').innerHTML = '<option value="">All Papers</option>' + opts;
+        document.getElementById('paper-subject').innerHTML = opts;
+      });
+    }
+
+    async function loadSyllabus() {
+      const subjectId = document.getElementById('syllabus-subject-filter').value;
+      const tbody = document.getElementById('syllabus-table');
+      if (!subjectId) { tbody.innerHTML = '<tr><td colspan="4"><div class="empty-state"><p>Select a subject to view syllabus</p></div></td></tr>'; return; }
+      try {
+        const units = await api('/api/subjects/' + subjectId + '/syllabus');
+        if (units.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4"><div class="empty-state"><p>No syllabus units. Add one!</p></div></td></tr>';
+          return;
+        }
+        tbody.innerHTML = units.map(u => `<tr>
+          <td><strong>Unit ${u.unitNumber}</strong></td>
+          <td>${u.title}</td>
+          <td>${(u.topics || []).map(t => '<span class="topic-tag">' + t + '</span>').join(' ')}</td>
+          <td class="actions-cell">
+            <button class="btn btn-outline btn-sm" onclick='editSyllabus(${JSON.stringify(u)})'>Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteSyllabus(${u.id})">Delete</button>
+          </td>
+        </tr>`).join('');
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function openSyllabusModal(unit) {
+      document.getElementById('syllabus-modal-title').textContent = unit ? 'Edit Unit' : 'Add Unit';
+      document.getElementById('syllabus-edit-id').value = unit ? unit.id : '';
+      document.getElementById('syllabus-subject').value = unit ? unit.subjectId : (document.getElementById('syllabus-subject-filter').value || allSubjects[0]?.id || '');
+      document.getElementById('syllabus-unit').value = unit ? unit.unitNumber : '1';
+      document.getElementById('syllabus-title').value = unit ? unit.title : '';
+      document.getElementById('syllabus-topics').value = unit ? (unit.topics || []).join('\n') : '';
+      openModal('syllabus-modal');
+    }
+
+    function editSyllabus(unit) { openSyllabusModal(unit); }
+
+    async function saveSyllabus() {
+      const editId = document.getElementById('syllabus-edit-id').value;
+      const data = {
+        subjectId: document.getElementById('syllabus-subject').value,
+        unitNumber: parseInt(document.getElementById('syllabus-unit').value),
+        title: document.getElementById('syllabus-title').value.trim(),
+        topics: document.getElementById('syllabus-topics').value.split('\n').map(t => t.trim()).filter(Boolean),
+      };
+      if (!data.subjectId || !data.title) { toast('Fill all required fields', 'error'); return; }
+      try {
+        if (editId) {
+          await api('/api/syllabus/' + editId, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+          toast('Unit updated');
+        } else {
+          await api('/api/syllabus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+          toast('Unit created');
+        }
+        closeModal('syllabus-modal');
+        loadSyllabus();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function deleteSyllabus(id) {
+      if (!confirm('Delete this syllabus unit?')) return;
+      try {
+        await api('/api/syllabus/' + id, { method: 'DELETE' });
+        toast('Unit deleted');
+        loadSyllabus();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    // ---- PAPERS ----
+    async function loadPapers() {
+      const subjectId = document.getElementById('paper-subject-filter').value;
+      const tbody = document.getElementById('papers-table');
+      try {
+        let papers;
+        if (subjectId) {
+          papers = await api('/api/subjects/' + subjectId + '/papers');
+        } else {
+          papers = await api('/api/papers');
+        }
+        allPapers = papers;
+        if (papers.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><p>No papers found. Add one!</p></div></td></tr>';
+          return;
+        }
+        tbody.innerHTML = papers.map(p => {
+          const subject = allSubjects.find(s => s.id === p.subjectId);
+          const typeBadge = p.examType === 'Main' ? 'badge-success' : 'badge-warning';
+          const pdfBadge = p.pdfPath ? `<span class="pdf-badge pdf-yes"><a href="${p.pdfPath}" target="_blank" style="color:inherit;text-decoration:none;">View PDF</a></span>` : '<span class="pdf-badge pdf-no">No PDF</span>';
+          return `<tr>
+            <td>${subject ? subject.code + ' - ' + subject.name : p.subjectId}</td>
+            <td>${p.year}</td>
+            <td>${p.month}</td>
+            <td><span class="badge ${typeBadge}">${p.examType}</span></td>
+            <td>${pdfBadge}</td>
+            <td class="actions-cell">
+              <button class="btn btn-outline btn-sm" onclick='editPaper(${JSON.stringify(p).replace(/'/g, "\\'")})'>Edit</button>
+              <button class="btn btn-danger btn-sm" onclick="deletePaper(${p.id})">Delete</button>
+            </td>
+          </tr>`;
+        }).join('');
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function openPaperModal(paper) {
+      document.getElementById('paper-modal-title').textContent = paper ? 'Edit Paper' : 'Add Paper';
+      document.getElementById('paper-edit-id').value = paper ? paper.id : '';
+      document.getElementById('paper-subject').value = paper ? paper.subjectId : (document.getElementById('paper-subject-filter').value || allSubjects[0]?.id || '');
+      document.getElementById('paper-year').value = paper ? paper.year : new Date().getFullYear().toString();
+      document.getElementById('paper-month').value = paper ? paper.month : 'Dec';
+      document.getElementById('paper-type').value = paper ? paper.examType : 'Main';
+      document.getElementById('paper-pdf').value = '';
+      openModal('paper-modal');
+    }
+
+    function editPaper(paper) { openPaperModal(paper); }
+
+    async function savePaper() {
+      const editId = document.getElementById('paper-edit-id').value;
+      const formData = new FormData();
+      formData.append('subjectId', document.getElementById('paper-subject').value);
+      formData.append('year', document.getElementById('paper-year').value.trim());
+      formData.append('month', document.getElementById('paper-month').value);
+      formData.append('examType', document.getElementById('paper-type').value);
+      const pdfFile = document.getElementById('paper-pdf').files[0];
+      if (pdfFile) formData.append('pdf', pdfFile);
+      if (!formData.get('subjectId') || !formData.get('year')) { toast('Fill all required fields', 'error'); return; }
+      try {
+        if (editId) {
+          await fetch(API + '/api/papers/' + editId, { method: 'PUT', body: formData });
+          toast('Paper updated');
+        } else {
+          await fetch(API + '/api/papers', { method: 'POST', body: formData });
+          toast('Paper created');
+        }
+        closeModal('paper-modal');
+        loadPapers();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function deletePaper(id) {
+      if (!confirm('Delete this paper and its PDF?')) return;
+      try {
+        await api('/api/papers/' + id, { method: 'DELETE' });
+        toast('Paper deleted');
+        loadPapers();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    // Init
+    loadDashboard();
+  </script>
+</body>
+</html>
