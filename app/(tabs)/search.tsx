@@ -5,14 +5,16 @@ import { router } from "expo-router";
 import { Ionicons, Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useQuery } from "@tanstack/react-query";
-import Colors from "@/constants/colors";
 import type { Subject, Branch } from "@/lib/rgpv-data";
 import { useBookmarks } from "@/lib/bookmarks";
+import { useTheme } from "@/lib/theme";
 
 function SubjectResultItem({ subject, branches }: { subject: Subject; branches: Branch[] }) {
   const branch = branches.find(b => b.id === subject.branchId);
   const { isBookmarked } = useBookmarks();
   const bookmarked = isBookmarked(subject.id);
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const handlePress = () => {
     if (Platform.OS !== "web") {
@@ -29,8 +31,8 @@ function SubjectResultItem({ subject, branches }: { subject: Subject; branches: 
         { transform: [{ scale: pressed ? 0.98 : 1 }] },
       ]}
     >
-      <View style={[styles.resultBadge, { backgroundColor: (branch?.color || Colors.primary) + '18' }]}>
-        <Text style={[styles.resultBadgeText, { color: branch?.color || Colors.primary }]}>
+      <View style={[styles.resultBadge, { backgroundColor: (branch?.color || colors.primary) + '18' }]}>
+        <Text style={[styles.resultBadgeText, { color: branch?.color || colors.primary }]}>
           {branch?.shortName || subject.branchId?.toUpperCase()}
         </Text>
       </View>
@@ -39,8 +41,8 @@ function SubjectResultItem({ subject, branches }: { subject: Subject; branches: 
         <Text style={styles.resultMeta}>{subject.code} | Sem {subject.semester}</Text>
       </View>
       <View style={styles.resultRight}>
-        {bookmarked && <Ionicons name="bookmark" size={14} color={Colors.primary} />}
-        <Feather name="chevron-right" size={16} color={Colors.textMuted} />
+        {bookmarked && <Ionicons name="bookmark" size={14} color={colors.primary} />}
+        <Feather name="chevron-right" size={16} color={colors.textMuted} />
       </View>
     </Pressable>
   );
@@ -50,6 +52,8 @@ export default function SearchScreen() {
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
   const webTopInset = Platform.OS === "web" ? 67 : 0;
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const { data: allSubjects = [], isLoading } = useQuery<Subject[]>({
     queryKey: ["/api/subjects"],
@@ -59,14 +63,15 @@ export default function SearchScreen() {
     queryKey: ["/api/branches"],
   });
 
+
   const results = useMemo(() => {
     if (!query.trim()) return [];
     const q = query.toLowerCase();
-    return allSubjects.filter(s =>
+    return allSubjects.filter(s => (
       s.name.toLowerCase().includes(q) ||
       s.code.toLowerCase().includes(q) ||
       s.branchId?.toLowerCase().includes(q)
-    );
+    ));
   }, [query, allSubjects]);
 
   const popularSubjects = useMemo(() => {
@@ -78,11 +83,11 @@ export default function SearchScreen() {
       <View style={[styles.header, { paddingTop: (Platform.OS === "web" ? webTopInset : insets.top) + 12 }]}>
         <Text style={styles.headerTitle}>Search</Text>
         <View style={styles.searchBar}>
-          <Ionicons name="search" size={18} color={Colors.textMuted} />
+          <Ionicons name="search" size={18} color={colors.textMuted} />
           <TextInput
             style={styles.searchInput}
             placeholder="Search subjects, codes..."
-            placeholderTextColor={Colors.textMuted}
+            placeholderTextColor={colors.textMuted}
             value={query}
             onChangeText={setQuery}
             autoCorrect={false}
@@ -90,14 +95,14 @@ export default function SearchScreen() {
           />
           {query.length > 0 && (
             <Pressable onPress={() => setQuery("")}>
-              <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
+              <Ionicons name="close-circle" size={18} color={colors.textMuted} />
             </Pressable>
           )}
         </View>
       </View>
 
       {isLoading ? (
-        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
+        <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
       ) : query.trim() ? (
         <FlatList
           data={results}
@@ -110,7 +115,7 @@ export default function SearchScreen() {
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Ionicons name="search-outline" size={48} color={Colors.textMuted} />
+              <Ionicons name="search-outline" size={48} color={colors.textMuted} />
               <Text style={styles.emptyText}>No subjects found</Text>
               <Text style={styles.emptySubtext}>Try a different search term</Text>
             </View>
@@ -128,7 +133,7 @@ export default function SearchScreen() {
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
             <View style={styles.popularHeader}>
-              <Ionicons name="trending-up" size={18} color={Colors.accent} />
+              <Ionicons name="trending-up" size={18} color={colors.accent} />
               <Text style={styles.popularTitle}>Popular Subjects</Text>
             </View>
           }
@@ -138,39 +143,33 @@ export default function SearchScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = {
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
   },
   header: {
     paddingHorizontal: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.cardBorder,
   },
   headerTitle: {
     fontFamily: "Inter_700Bold",
     fontSize: 28,
-    color: Colors.text,
     marginBottom: 14,
   },
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Colors.card,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     gap: 10,
     borderWidth: 1,
-    borderColor: Colors.cardBorder,
   },
   searchInput: {
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 15,
-    color: Colors.text,
     padding: 0,
   },
   listContent: {
@@ -181,12 +180,10 @@ const styles = StyleSheet.create({
   resultCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Colors.card,
     borderRadius: 12,
     padding: 14,
     gap: 12,
     borderWidth: 1,
-    borderColor: Colors.cardBorder,
   },
   resultBadge: {
     paddingHorizontal: 10,
@@ -204,13 +201,11 @@ const styles = StyleSheet.create({
   resultName: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 14,
-    color: Colors.text,
     marginBottom: 2,
   },
   resultMeta: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: Colors.textSecondary,
   },
   resultRight: {
     flexDirection: "row",
@@ -226,12 +221,10 @@ const styles = StyleSheet.create({
   emptyText: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 16,
-    color: Colors.textSecondary,
   },
   emptySubtext: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: Colors.textMuted,
   },
   popularHeader: {
     flexDirection: "row",
@@ -242,6 +235,22 @@ const styles = StyleSheet.create({
   popularTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 16,
-    color: Colors.text,
   },
-});
+};
+
+function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
+  return StyleSheet.create({
+    ...baseStyles,
+    container: { ...baseStyles.container, backgroundColor: colors.background },
+    header: { ...baseStyles.header, borderBottomColor: colors.cardBorder },
+    headerTitle: { ...baseStyles.headerTitle, color: colors.text },
+    searchBar: { ...baseStyles.searchBar, backgroundColor: colors.card, borderColor: colors.cardBorder },
+    searchInput: { ...baseStyles.searchInput, color: colors.text },
+    resultCard: { ...baseStyles.resultCard, backgroundColor: colors.card, borderColor: colors.cardBorder },
+    resultName: { ...baseStyles.resultName, color: colors.text },
+    resultMeta: { ...baseStyles.resultMeta, color: colors.textSecondary },
+    emptyText: { ...baseStyles.emptyText, color: colors.textSecondary },
+    emptySubtext: { ...baseStyles.emptySubtext, color: colors.textMuted },
+    popularTitle: { ...baseStyles.popularTitle, color: colors.text },
+  });
+}

@@ -1,19 +1,25 @@
-import { StyleSheet, Text, View, ScrollView, Pressable, Platform, ActivityIndicator } from "react-native";
+import { StyleSheet, Text, View, ScrollView, Pressable, Platform, ActivityIndicator, Linking } from "react-native";
+import React from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useQuery } from "@tanstack/react-query";
-import Colors from "@/constants/colors";
-import type { Branch } from "@/lib/rgpv-data";
+import { useTheme } from "@/lib/theme";
+import type { Branch, Paper, Subject } from "@/lib/rgpv-data";
+import { getApiUrl } from "@/lib/query-client";
+import { useMemo } from "react";
 
-function BranchCard({ branch, index }: { branch: Branch; index: number }) {
+function BranchCard({ branch }: { branch: Branch }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
   const handlePress = () => {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    router.push({ pathname: "/branch/[id]", params: { id: branch.id } });
+    router.push(`/branch/${branch.id}`);
   };
 
   const iconMap: Record<string, any> = {
@@ -43,7 +49,54 @@ function BranchCard({ branch, index }: { branch: Branch; index: number }) {
         <Text style={styles.branchShortName}>{branch.shortName}</Text>
         <Text style={styles.branchFullName} numberOfLines={2}>{branch.name}</Text>
       </View>
-      <Feather name="chevron-right" size={18} color={Colors.textMuted} />
+      <Feather name="chevron-right" size={18} color={colors.textMuted} />
+    </Pressable>
+  );
+}
+
+function RecentPaperCard({ paper, subject }: { paper: Paper; subject?: Subject }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const isMain = paper.examType === "Main";
+
+  const handlePress = () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    if (paper.pdfPath) {
+      const pdfUrl = getApiUrl() + paper.pdfPath.replace(/^\//, "");
+      Linking.openURL(pdfUrl);
+      return;
+    }
+    if (subject) {
+      router.push({ pathname: "/subject/[id]", params: { id: subject.id } });
+    }
+  };
+
+  return (
+    <Pressable
+      onPress={handlePress}
+      style={({ pressed }) => [
+        styles.paperCard,
+        { transform: [{ scale: pressed ? 0.98 : 1 }] },
+      ]}
+    >
+      <View style={[styles.paperIcon, { backgroundColor: isMain ? colors.primary + "18" : colors.warning + "18" }]}>
+        <Feather name="file-text" size={18} color={isMain ? colors.primary : colors.warning} />
+      </View>
+      <View style={styles.paperInfo}>
+        <Text style={styles.paperTitle}>{paper.month} {paper.year}</Text>
+        <Text style={styles.paperSubtitle} numberOfLines={1}>
+          {subject ? `${subject.code} - ${subject.name}` : paper.subjectId}
+        </Text>
+        <View style={styles.paperMetaRow}>
+          <Text style={[styles.paperBadge, { color: isMain ? colors.accent : colors.warning }]}>
+            {paper.examType}
+          </Text>
+          <Text style={styles.paperBadge}>{paper.pdfPath ? "PDF" : "Coming Soon"}</Text>
+        </View>
+      </View>
+      <Feather name={paper.pdfPath ? "download" : "chevron-right"} size={18} color={colors.textMuted} />
     </Pressable>
   );
 }
@@ -51,10 +104,48 @@ function BranchCard({ branch, index }: { branch: Branch; index: number }) {
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const webTopInset = Platform.OS === "web" ? 67 : 0;
+  const { colors, toggle, mode } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const { data: branches = [], isLoading } = useQuery<Branch[]>({
     queryKey: ["/api/branches"],
   });
+
+  const { data: subjects = [] } = useQuery<Subject[]>({
+    queryKey: ["/api/subjects"],
+  });
+
+  const { data: papers = [] } = useQuery<Paper[]>({
+    queryKey: ["/api/papers"],
+  });
+
+  const { data: mostViewed = [] } = useQuery<Paper[]>({
+    queryKey: ["/api/papers?sort=views&limit=5"],
+  });
+
+
+
+  const monthOrder: Record<string, number> = {
+    Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6,
+    Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12,
+  };
+
+  const filteredSubjects = subjects;
+  const filteredPapers = papers;
+  const filteredMostViewed = mostViewed;
+
+  const recentPapers = [...filteredPapers]
+    .sort((a, b) => {
+      const yearDiff = Number(b.year) - Number(a.year);
+      if (yearDiff !== 0) return yearDiff;
+      return (monthOrder[b.month] || 0) - (monthOrder[a.month] || 0);
+    })
+    .slice(0, 5);
+
+  const subjectsById = subjects.reduce<Record<string, Subject>>((acc, s) => {
+    acc[s.id] = s;
+    return acc;
+  }, {});
 
   return (
     <View style={styles.container}>
@@ -70,17 +161,22 @@ export default function HomeScreen() {
         contentInsetAdjustmentBehavior="automatic"
       >
         <LinearGradient
-          colors={[Colors.primary + '25', Colors.background]}
+          colors={[colors.primary + '25', colors.background]}
           style={styles.headerGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         >
           <View style={styles.headerContent}>
             <View style={styles.headerBadge}>
-              <Ionicons name="school" size={16} color={Colors.primary} />
+              <Ionicons name="school" size={16} color={colors.primary} />
               <Text style={styles.headerBadgeText}>RGPV</Text>
             </View>
-            <Text style={styles.headerTitle}>Previous Year{'\n'}Papers & Syllabus</Text>
+            <View style={styles.headerTitleRow}>
+              <Text style={styles.headerTitle}>Previous Year{`\n`}Papers & Syllabus</Text>
+              <Pressable onPress={toggle} style={styles.themeToggle} hitSlop={10}>
+                <Ionicons name={mode === "dark" ? "sunny" : "moon"} size={18} color={colors.text} />
+              </Pressable>
+            </View>
             <Text style={styles.headerSubtitle}>
               Access question papers, syllabus & study material for all branches
             </Text>
@@ -94,15 +190,60 @@ export default function HomeScreen() {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>50+</Text>
+            <Text style={styles.statNumber}>{filteredSubjects.length}</Text>
             <Text style={styles.statLabel}>Subjects</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>100+</Text>
+            <Text style={styles.statNumber}>{filteredPapers.length}</Text>
             <Text style={styles.statLabel}>Papers</Text>
           </View>
         </View>
+
+
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Latest Papers</Text>
+          <Text style={styles.sectionSubtitle}>Quick access to recently added papers</Text>
+        </View>
+
+        {recentPapers.length === 0 ? (
+          <View style={styles.emptyLatest}>
+            <Feather name="clock" size={32} color={colors.textMuted} />
+            <Text style={styles.emptyLatestText}>No papers yet</Text>
+          </View>
+        ) : (
+          <View style={styles.paperList}>
+            {recentPapers.map((paper) => (
+              <RecentPaperCard
+                key={paper.id}
+                paper={paper}
+                subject={subjectsById[paper.subjectId]}
+              />
+            ))}
+          </View>
+        )}
+
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Most Viewed</Text>
+          <Text style={styles.sectionSubtitle}>Popular papers across all branches</Text>
+        </View>
+
+        {filteredMostViewed.length === 0 ? (
+          <View style={styles.emptyLatest}>
+            <Feather name="trending-up" size={32} color={colors.textMuted} />
+            <Text style={styles.emptyLatestText}>No views yet</Text>
+          </View>
+        ) : (
+          <View style={styles.paperList}>
+            {filteredMostViewed.map((paper) => (
+              <RecentPaperCard
+                key={`mv-${paper.id}`}
+                paper={paper}
+                subject={subjectsById[paper.subjectId]}
+              />
+            ))}
+          </View>
+        )}
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Select Your Branch</Text>
@@ -110,11 +251,11 @@ export default function HomeScreen() {
         </View>
 
         {isLoading ? (
-          <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
+          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
         ) : (
           <View style={styles.branchList}>
-            {branches.map((branch, index) => (
-              <BranchCard key={branch.id} branch={branch} index={index} />
+            {branches.map((branch) => (
+              <BranchCard key={branch.id} branch={branch} />
             ))}
           </View>
         )}
@@ -123,10 +264,9 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = {
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
   },
   scrollContent: {
     paddingHorizontal: 20,
@@ -145,7 +285,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: Colors.primary + '20',
     alignSelf: "flex-start",
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -155,31 +294,41 @@ const styles = StyleSheet.create({
   headerBadgeText: {
     fontFamily: "Inter_700Bold",
     fontSize: 13,
-    color: Colors.primary,
     letterSpacing: 1,
+  },
+  headerTitleRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  themeToggle: {
+    marginTop: 6,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
   },
   headerTitle: {
     fontFamily: "Inter_700Bold",
     fontSize: 28,
-    color: Colors.text,
     lineHeight: 36,
     marginBottom: 10,
   },
   headerSubtitle: {
     fontFamily: "Inter_400Regular",
     fontSize: 14,
-    color: Colors.textSecondary,
     lineHeight: 20,
   },
   statsRow: {
     flexDirection: "row",
-    backgroundColor: Colors.card,
     borderRadius: 16,
     padding: 20,
     marginBottom: 28,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: Colors.cardBorder,
   },
   statItem: {
     flex: 1,
@@ -188,18 +337,15 @@ const styles = StyleSheet.create({
   statNumber: {
     fontFamily: "Inter_700Bold",
     fontSize: 22,
-    color: Colors.primary,
     marginBottom: 4,
   },
   statLabel: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: Colors.textSecondary,
   },
   statDivider: {
     width: 1,
     height: 32,
-    backgroundColor: Colors.cardBorder,
   },
   sectionHeader: {
     marginBottom: 16,
@@ -207,25 +353,72 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 18,
-    color: Colors.text,
     marginBottom: 4,
   },
   sectionSubtitle: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: Colors.textMuted,
   },
   branchList: {
     gap: 10,
   },
+  paperList: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  paperCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    gap: 12,
+  },
+  paperIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  paperInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  paperTitle: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 14,
+  },
+  paperSubtitle: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+  },
+  paperMetaRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  paperBadge: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
+  },
+  emptyLatest: {
+    borderRadius: 14,
+    padding: 20,
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  emptyLatestText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 13,
+  },
   branchCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Colors.card,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.cardBorder,
     gap: 14,
   },
   branchIconContainer: {
@@ -241,13 +434,39 @@ const styles = StyleSheet.create({
   branchShortName: {
     fontFamily: "Inter_700Bold",
     fontSize: 16,
-    color: Colors.text,
     marginBottom: 2,
   },
   branchFullName: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    color: Colors.textSecondary,
     lineHeight: 16,
   },
-});
+};
+
+function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
+  return StyleSheet.create({
+    ...baseStyles,
+    container: { ...baseStyles.container, backgroundColor: colors.background },
+    headerBadge: { ...baseStyles.headerBadge, backgroundColor: colors.primary + "20" },
+    headerBadgeText: { ...baseStyles.headerBadgeText, color: colors.primary },
+    themeToggle: { ...baseStyles.themeToggle, backgroundColor: colors.card, borderColor: colors.cardBorder },
+    headerTitle: { ...baseStyles.headerTitle, color: colors.text },
+    headerSubtitle: { ...baseStyles.headerSubtitle, color: colors.textSecondary },
+    statsRow: { ...baseStyles.statsRow, backgroundColor: colors.card, borderColor: colors.cardBorder },
+    statNumber: { ...baseStyles.statNumber, color: colors.primary },
+    statLabel: { ...baseStyles.statLabel, color: colors.textSecondary },
+    statDivider: { ...baseStyles.statDivider, backgroundColor: colors.cardBorder },
+    sectionTitle: { ...baseStyles.sectionTitle, color: colors.text },
+    sectionSubtitle: { ...baseStyles.sectionSubtitle, color: colors.textMuted },
+    paperCard: { ...baseStyles.paperCard, backgroundColor: colors.card, borderColor: colors.cardBorder },
+    paperTitle: { ...baseStyles.paperTitle, color: colors.text },
+    paperSubtitle: { ...baseStyles.paperSubtitle, color: colors.textSecondary },
+    paperBadge: { ...baseStyles.paperBadge, color: colors.textMuted },
+    emptyLatest: { ...baseStyles.emptyLatest, backgroundColor: colors.card, borderColor: colors.cardBorder },
+    emptyLatestText: { ...baseStyles.emptyLatestText, color: colors.textMuted },
+    branchCard: { ...baseStyles.branchCard, backgroundColor: colors.card, borderColor: colors.cardBorder },
+    branchShortName: { ...baseStyles.branchShortName, color: colors.text },
+    branchFullName: { ...baseStyles.branchFullName, color: colors.textSecondary },
+
+  });
+}

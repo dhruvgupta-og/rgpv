@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "RGPV Papers",
-    "slug": "rgpv-papers",
+    "slug": "rgpv-pyq",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -37,11 +37,21 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {
+        "origin": "https://replit.com/"
+      },
+      "eas": {
+        "projectId": "0c3e4b75-fd1f-4bc9-93e7-170da7eeb1c5"
+      }
+    },
+    "owner": "dhruvhereyo0s-organization"
   }
 }

@@ -1,15 +1,17 @@
-import { StyleSheet, Text, View, ScrollView, Pressable, Platform, ActivityIndicator } from "react-native";
+import { StyleSheet, Text, View, ScrollView, Pressable, Platform, ActivityIndicator, TextInput } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { useState, useMemo } from "react";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useQuery } from "@tanstack/react-query";
-import Colors from "@/constants/colors";
 import type { Branch, Subject } from "@/lib/rgpv-data";
 import { useBookmarks } from "@/lib/bookmarks";
+import { useTheme } from "@/lib/theme";
 
-function SemesterPill({ semester, isSelected, onPress }: { semester: number; isSelected: boolean; onPress: () => void }) {
+function SemesterPill({ label, isSelected, onPress }: { label: string; isSelected: boolean; onPress: () => void }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Pressable
       onPress={onPress}
@@ -22,7 +24,7 @@ function SemesterPill({ semester, isSelected, onPress }: { semester: number; isS
         styles.semPillText,
         isSelected && styles.semPillTextActive,
       ]}>
-        Sem {semester}
+        {label}
       </Text>
     </Pressable>
   );
@@ -31,6 +33,8 @@ function SemesterPill({ semester, isSelected, onPress }: { semester: number; isS
 function SubjectCard({ subject, branchColor }: { subject: Subject; branchColor: string }) {
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const bookmarked = isBookmarked(subject.id);
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const handlePress = () => {
     if (Platform.OS !== "web") {
@@ -62,13 +66,13 @@ function SubjectCard({ subject, branchColor }: { subject: Subject; branchColor: 
           <Ionicons
             name={bookmarked ? "bookmark" : "bookmark-outline"}
             size={20}
-            color={bookmarked ? Colors.primary : Colors.textMuted}
+            color={bookmarked ? colors.primary : colors.textMuted}
           />
         </Pressable>
       </View>
       <Text style={styles.subjectName}>{subject.name}</Text>
       <View style={styles.subjectBottom}>
-        <Feather name="arrow-right" size={16} color={Colors.primary} />
+        <Feather name="arrow-right" size={16} color={colors.primary} />
       </View>
     </Pressable>
   );
@@ -78,6 +82,8 @@ export default function BranchScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const webTopInset = Platform.OS === "web" ? 67 : 0;
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const { data: branch, isLoading: branchLoading } = useQuery<Branch>({
     queryKey: ["/api/branches", id],
@@ -87,24 +93,29 @@ export default function BranchScreen() {
     queryKey: ["/api/subjects?branch=" + id],
   });
 
-  const semesters = useMemo(() => {
-    const sems = [...new Set(allSubjects.map(s => s.semester))].sort((a, b) => a - b);
-    return sems.length > 0 ? sems : [3];
-  }, [allSubjects]);
+  const [selectedSem, setSelectedSem] = useState<number | "all" | null>(null);
+  const [query, setQuery] = useState("");
 
-  const [selectedSem, setSelectedSem] = useState<number | null>(null);
+  const semesters = useMemo(() => {
+    // Always show all 8 semesters for every branch
+    return [1, 2, 3, 4, 5, 6, 7, 8];
+  }, []);
 
   const currentSem = selectedSem ?? semesters[0] ?? 3;
 
-  const filteredSubjects = useMemo(
-    () => allSubjects.filter(s => s.semester === currentSem),
-    [allSubjects, currentSem]
-  );
+  const filteredSubjects = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return allSubjects.filter(s => {
+      if (currentSem !== "all" && s.semester !== currentSem) return false;
+      if (!q) return true;
+      return s.name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q);
+    });
+  }, [allSubjects, currentSem, query]);
 
   if (branchLoading) {
     return (
       <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -117,7 +128,7 @@ export default function BranchScreen() {
     );
   }
 
-  const handleSemSelect = (sem: number) => {
+  const handleSemSelect = (sem: number | "all") => {
     if (Platform.OS !== "web") {
       Haptics.selectionAsync();
     }
@@ -126,9 +137,9 @@ export default function BranchScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.topBar, { paddingTop: (Platform.OS === "web" ? webTopInset : insets.top) + 8 }]}>
+      <View style={[styles.topBar, { paddingTop: (Platform.OS === "web" ? webTopInset : insets.top) + 8 }]}> 
         <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={22} color={Colors.text} />
+          <Ionicons name="arrow-back" size={22} color={colors.text} />
         </Pressable>
         <View style={styles.topBarCenter}>
           <Text style={styles.topBarTitle}>{branch.shortName}</Text>
@@ -146,12 +157,38 @@ export default function BranchScreen() {
         {semesters.map(sem => (
           <SemesterPill
             key={sem}
-            semester={sem}
-            isSelected={sem === currentSem}
+            label={`Sem ${sem}`}
+            isSelected={currentSem !== "all" && sem === currentSem}
             onPress={() => handleSemSelect(sem)}
           />
         ))}
+        <SemesterPill
+          key="all"
+          label="All"
+          isSelected={currentSem === "all"}
+          onPress={() => handleSemSelect("all")}
+        />
       </ScrollView>
+
+      <View style={styles.searchBarWrap}>
+        <View style={styles.searchBar}>
+          <Ionicons name="search" size={16} color={colors.textMuted} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search subjects in this branch..."
+            placeholderTextColor={colors.textMuted}
+            value={query}
+            onChangeText={setQuery}
+            autoCorrect={false}
+            autoCapitalize="none"
+          />
+          {query.length > 0 && (
+            <Pressable onPress={() => setQuery("")}>
+              <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+            </Pressable>
+          )}
+        </View>
+      </View>
 
       <ScrollView
         contentContainerStyle={[
@@ -161,7 +198,7 @@ export default function BranchScreen() {
         showsVerticalScrollIndicator={false}
       >
         {subjectsLoading ? (
-          <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
+          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
         ) : filteredSubjects.length > 0 ? (
           <View style={styles.subjectList}>
             {filteredSubjects.map(subject => (
@@ -174,7 +211,7 @@ export default function BranchScreen() {
           </View>
         ) : (
           <View style={styles.emptyState}>
-            <Feather name="inbox" size={40} color={Colors.textMuted} />
+            <Feather name="inbox" size={40} color={colors.textMuted} />
             <Text style={styles.emptyTitle}>No subjects available</Text>
             <Text style={styles.emptySubtext}>
               Subjects for this semester will be added soon
@@ -186,10 +223,9 @@ export default function BranchScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = {
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
   },
   topBar: {
     flexDirection: "row",
@@ -197,14 +233,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.cardBorder,
     gap: 8,
   },
   backBtn: {
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: Colors.card,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -215,17 +249,34 @@ const styles = StyleSheet.create({
   topBarTitle: {
     fontFamily: "Inter_700Bold",
     fontSize: 18,
-    color: Colors.text,
   },
   topBarSubtitle: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,
-    color: Colors.textSecondary,
   },
   semScroll: {
     flexGrow: 0,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.cardBorder,
+  },
+  searchBarWrap: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+    borderWidth: 1,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: "Inter_400Regular",
+    fontSize: 14,
+    padding: 0,
   },
   semRow: {
     paddingHorizontal: 16,
@@ -236,21 +287,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 10,
-    backgroundColor: Colors.card,
     borderWidth: 1,
-    borderColor: Colors.cardBorder,
   },
-  semPillActive: {
-    backgroundColor: Colors.primary + '20',
-    borderColor: Colors.primary,
-  },
+  semPillActive: {},
   semPillText: {
     fontFamily: "Inter_500Medium",
     fontSize: 13,
-    color: Colors.textSecondary,
   },
   semPillTextActive: {
-    color: Colors.primary,
     fontFamily: "Inter_600SemiBold",
   },
   scrollContent: {
@@ -261,11 +305,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   subjectCard: {
-    backgroundColor: Colors.card,
     borderRadius: 16,
     padding: 18,
     borderWidth: 1,
-    borderColor: Colors.cardBorder,
     gap: 10,
   },
   subjectTop: {
@@ -286,7 +328,6 @@ const styles = StyleSheet.create({
   subjectName: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 17,
-    color: Colors.text,
     lineHeight: 22,
   },
   subjectBottom: {
@@ -303,19 +344,40 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 16,
-    color: Colors.textSecondary,
   },
   emptySubtext: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: Colors.textMuted,
     textAlign: "center",
   },
   errorText: {
     fontFamily: "Inter_500Medium",
     fontSize: 16,
-    color: Colors.danger,
     textAlign: "center",
     marginTop: 100,
   },
-});
+};
+
+function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
+  return StyleSheet.create({
+    ...baseStyles,
+    container: { ...baseStyles.container, backgroundColor: colors.background },
+    topBar: { ...baseStyles.topBar, borderBottomColor: colors.cardBorder },
+    backBtn: { ...baseStyles.backBtn, backgroundColor: colors.card },
+    topBarTitle: { ...baseStyles.topBarTitle, color: colors.text },
+    topBarSubtitle: { ...baseStyles.topBarSubtitle, color: colors.textSecondary },
+    semScroll: { ...baseStyles.semScroll, borderBottomColor: colors.cardBorder },
+    searchBarWrap: { ...baseStyles.searchBarWrap, borderBottomColor: colors.cardBorder },
+    searchBar: { ...baseStyles.searchBar, backgroundColor: colors.card, borderColor: colors.cardBorder },
+    searchInput: { ...baseStyles.searchInput, color: colors.text },
+    semPill: { ...baseStyles.semPill, backgroundColor: colors.card, borderColor: colors.cardBorder },
+    semPillActive: { ...baseStyles.semPillActive, backgroundColor: colors.primary + "20", borderColor: colors.primary },
+    semPillText: { ...baseStyles.semPillText, color: colors.textSecondary },
+    semPillTextActive: { ...baseStyles.semPillTextActive, color: colors.primary },
+    subjectCard: { ...baseStyles.subjectCard, backgroundColor: colors.card, borderColor: colors.cardBorder },
+    subjectName: { ...baseStyles.subjectName, color: colors.text },
+    emptyTitle: { ...baseStyles.emptyTitle, color: colors.textSecondary },
+    emptySubtext: { ...baseStyles.emptySubtext, color: colors.textMuted },
+    errorText: { ...baseStyles.errorText, color: colors.danger },
+  });
+}

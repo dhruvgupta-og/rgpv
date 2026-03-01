@@ -1,4 +1,4 @@
-const Colors = {
+export const DarkColors = {
   primary: '#0EA5E9',
   primaryDark: '#0284C7',
   primaryLight: '#38BDF8',
@@ -28,4 +28,35 @@ const Colors = {
   },
 };
 
+export const LightColors = {
+  primary: '#0EA5E9',
+  primaryDark: '#0284C7',
+  primaryLight: '#38BDF8',
+  accent: '#06D6A0',
+  accentDark: '#059669',
+  background: '#F8FAFC',
+  backgroundLight: '#FFFFFF',
+  card: '#FFFFFF',
+  cardLight: '#F1F5F9',
+  cardBorder: '#E2E8F0',
+  text: '#0F172A',
+  textSecondary: '#475569',
+  textMuted: '#64748B',
+  white: '#FFFFFF',
+  black: '#000000',
+  danger: '#EF4444',
+  warning: '#F59E0B',
+  success: '#10B981',
+  skeleton: '#E2E8F0',
+  tabBar: '#FFFFFF',
+  light: {
+    text: '#0F172A',
+    background: '#FFFFFF',
+    tint: '#0EA5E9',
+    tabIconDefault: '#94A3B8',
+    tabIconSelected: '#0EA5E9',
+  },
+};
+
+const Colors = DarkColors;
 export default Colors;

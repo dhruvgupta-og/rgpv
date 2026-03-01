@@ -25,6 +25,7 @@ export interface Paper {
   month: string;
   examType: string;
   pdfPath?: string | null;
+  views?: number;
   createdAt?: string;
 }
 
@@ -35,4 +36,15 @@ export interface Branch {
   icon: string;
   color: string;
   createdAt?: string;
+}
+
+export interface Profile {
+  id: number;
+  deviceId: string;
+  name: string;
+  branchId: string;
+  year: string;
+  collegeName: string;
+  createdAt?: string;
+  updatedAt?: string;
 }

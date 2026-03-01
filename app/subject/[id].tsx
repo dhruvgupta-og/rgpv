@@ -1,20 +1,23 @@
 import { StyleSheet, Text, View, ScrollView, Pressable, Platform, Alert, ActivityIndicator, Linking } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useQuery } from "@tanstack/react-query";
-import Colors from "@/constants/colors";
 import type { Branch, Subject, SyllabusUnit, Paper } from "@/lib/rgpv-data";
 import { useBookmarks } from "@/lib/bookmarks";
-import { getApiUrl } from "@/lib/query-client";
+import { getApiUrl, apiRequest } from "@/lib/query-client";
+import { useTheme } from "@/lib/theme";
+import { downloadPaper, isDownloaded, openDownload, shareDownload, type DownloadItem } from "@/lib/downloads";
 
 type TabType = "syllabus" | "papers";
 
 function SyllabusUnitCard({ unit, index }: { unit: SyllabusUnit; index: number }) {
   const [expanded, setExpanded] = useState(index === 0);
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   return (
     <Animated.View entering={FadeInDown.delay(index * 60).duration(400)}>
@@ -30,7 +33,7 @@ function SyllabusUnitCard({ unit, index }: { unit: SyllabusUnit; index: number }
             <Text style={styles.unitBadgeText}>{unit.unitNumber}</Text>
           </View>
           <Text style={styles.unitTitle}>{unit.title}</Text>
-          <Feather name={expanded ? "chevron-up" : "chevron-down"} size={18} color={Colors.textMuted} />
+          <Feather name={expanded ? "chevron-up" : "chevron-down"} size={18} color={colors.textMuted} />
         </View>
         {expanded && (
           <View style={styles.topicsList}>
@@ -48,21 +51,60 @@ function SyllabusUnitCard({ unit, index }: { unit: SyllabusUnit; index: number }
 }
 
 function PaperCard({ paper, index, subjectName }: { paper: Paper; index: number; subjectName: string }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const isMain = paper.examType === "Main";
+  const [downloaded, setDownloaded] = useState<DownloadItem | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
-  const handlePress = () => {
+  useEffect(() => {
+    if (!paper.pdfPath) return;
+    isDownloaded(String(paper.id)).then(setDownloaded);
+  }, [paper.id, paper.pdfPath]);
+
+  const markView = () => {
+    apiRequest("POST", `/api/papers/${paper.id}/view`).catch(() => {});
+  };
+
+  const handlePress = async () => {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    if (downloaded) {
+      await openDownload(downloaded);
+      markView();
+      return;
     }
     if (paper.pdfPath) {
       const pdfUrl = getApiUrl() + paper.pdfPath.replace(/^\//, '');
       Linking.openURL(pdfUrl);
+      markView();
     } else {
       Alert.alert(
         `${subjectName}`,
         `${paper.month} ${paper.year} (${paper.examType} Exam)\n\nPaper PDF not uploaded yet. Stay tuned!`,
         [{ text: "OK" }]
       );
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!paper.pdfPath || downloading) return;
+    setDownloading(true);
+    try {
+      const pdfUrl = getApiUrl() + paper.pdfPath.replace(/^\//, '');
+      const item = await downloadPaper({
+        id: String(paper.id),
+        subjectId: paper.subjectId,
+        title: subjectName,
+        year: paper.year,
+        month: paper.month,
+        examType: paper.examType,
+        remoteUrl: pdfUrl,
+      });
+      setDownloaded(item);
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -75,23 +117,35 @@ function PaperCard({ paper, index, subjectName }: { paper: Paper; index: number;
           { transform: [{ scale: pressed ? 0.98 : 1 }] },
         ]}
       >
-        <View style={[styles.paperIcon, { backgroundColor: isMain ? Colors.primary + '18' : Colors.warning + '18' }]}>
-          <Feather name="file-text" size={20} color={isMain ? Colors.primary : Colors.warning} />
+        <View style={[styles.paperIcon, { backgroundColor: isMain ? colors.primary + '18' : colors.warning + '18' }]}>
+          <Feather name="file-text" size={20} color={isMain ? colors.primary : colors.warning} />
         </View>
         <View style={styles.paperInfo}>
           <Text style={styles.paperTitle}>{paper.month} {paper.year}</Text>
           <View style={styles.paperMeta}>
-            <View style={[styles.typeBadge, { backgroundColor: isMain ? Colors.accent + '20' : Colors.warning + '20' }]}>
-              <Text style={[styles.typeText, { color: isMain ? Colors.accent : Colors.warning }]}>{paper.examType}</Text>
+            <View style={[styles.typeBadge, { backgroundColor: isMain ? colors.accent + '20' : colors.warning + '20' }]}>
+              <Text style={[styles.typeText, { color: isMain ? colors.accent : colors.warning }]}>{paper.examType}</Text>
             </View>
             {paper.pdfPath ? (
-              <View style={[styles.typeBadge, { backgroundColor: Colors.accent + '20' }]}>
-                <Text style={[styles.typeText, { color: Colors.accent }]}>PDF</Text>
+              <View style={[styles.typeBadge, { backgroundColor: colors.accent + '20' }]}>
+                <Text style={[styles.typeText, { color: colors.accent }]}>{downloaded ? "Saved" : "PDF"}</Text>
               </View>
             ) : null}
           </View>
         </View>
-        <Feather name={paper.pdfPath ? "download" : "clock"} size={18} color={paper.pdfPath ? Colors.primary : Colors.textMuted} />
+        <View style={styles.paperActions}>
+          {Platform.OS === "android" && paper.pdfPath ? (
+            <Pressable onPress={handleDownload} hitSlop={8} disabled={downloading}>
+              <Feather name={downloaded ? "check-circle" : "download"} size={18} color={downloaded ? colors.success : colors.primary} />
+            </Pressable>
+          ) : null}
+          {downloaded ? (
+            <Pressable onPress={() => shareDownload(downloaded)} hitSlop={8}>
+              <Feather name="share-2" size={18} color={colors.textMuted} />
+            </Pressable>
+          ) : null}
+          <Feather name={paper.pdfPath ? "external-link" : "clock"} size={18} color={paper.pdfPath ? colors.textMuted : colors.textMuted} />
+        </View>
       </Pressable>
     </Animated.View>
   );
@@ -107,7 +161,10 @@ export default function SubjectScreen() {
   const insets = useSafeAreaInsets();
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const [activeTab, setActiveTab] = useState<TabType>("syllabus");
+  const [paperFilter, setPaperFilter] = useState<"All" | "Main" | "Supply" | "Back">("All");
   const webTopInset = Platform.OS === "web" ? 67 : 0;
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const { data: subject, isLoading } = useQuery<SubjectDetail>({
     queryKey: ["/api/subjects", id],
@@ -120,8 +177,8 @@ export default function SubjectScreen() {
 
   if (isLoading) {
     return (
-      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}> 
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -137,6 +194,9 @@ export default function SubjectScreen() {
   const bookmarked = isBookmarked(subject.id);
   const syllabus = subject.syllabus || [];
   const papers = subject.papers || [];
+  const filteredPapers = paperFilter === "All"
+    ? papers
+    : papers.filter(p => p.examType === paperFilter);
 
   const handleBookmark = () => {
     if (Platform.OS !== "web") {
@@ -149,7 +209,7 @@ export default function SubjectScreen() {
     <View style={styles.container}>
       <View style={[styles.topBar, { paddingTop: (Platform.OS === "web" ? webTopInset : insets.top) + 8 }]}>
         <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={22} color={Colors.text} />
+          <Ionicons name="arrow-back" size={22} color={colors.text} />
         </Pressable>
         <View style={styles.topBarCenter}>
           <Text style={styles.topBarCode}>{subject.code}</Text>
@@ -158,7 +218,7 @@ export default function SubjectScreen() {
           <Ionicons
             name={bookmarked ? "bookmark" : "bookmark-outline"}
             size={20}
-            color={bookmarked ? Colors.primary : Colors.text}
+            color={bookmarked ? colors.primary : colors.text}
           />
         </Pressable>
       </View>
@@ -173,8 +233,8 @@ export default function SubjectScreen() {
         <View style={styles.subjectHeader}>
           <Text style={styles.subjectName}>{subject.name}</Text>
           <View style={styles.metaRow}>
-            <View style={[styles.metaChip, { backgroundColor: (branch?.color || Colors.primary) + '18' }]}>
-              <Text style={[styles.metaChipText, { color: branch?.color || Colors.primary }]}>
+            <View style={[styles.metaChip, { backgroundColor: (branch?.color || colors.primary) + '18' }]}>
+              <Text style={[styles.metaChipText, { color: branch?.color || colors.primary }]}>
                 {branch?.shortName || subject.branchId?.toUpperCase()}
               </Text>
             </View>
@@ -192,7 +252,7 @@ export default function SubjectScreen() {
             }}
             style={[styles.tab, activeTab === "syllabus" && styles.tabActive]}
           >
-            <Feather name="layers" size={16} color={activeTab === "syllabus" ? Colors.primary : Colors.textMuted} />
+            <Feather name="layers" size={16} color={activeTab === "syllabus" ? colors.primary : colors.textMuted} />
             <Text style={[styles.tabText, activeTab === "syllabus" && styles.tabTextActive]}>
               Syllabus
             </Text>
@@ -204,7 +264,7 @@ export default function SubjectScreen() {
             }}
             style={[styles.tab, activeTab === "papers" && styles.tabActive]}
           >
-            <Feather name="file-text" size={16} color={activeTab === "papers" ? Colors.primary : Colors.textMuted} />
+            <Feather name="file-text" size={16} color={activeTab === "papers" ? colors.primary : colors.textMuted} />
             <Text style={[styles.tabText, activeTab === "papers" && styles.tabTextActive]}>
               Papers ({papers.length})
             </Text>
@@ -219,7 +279,7 @@ export default function SubjectScreen() {
               ))
             ) : (
               <View style={styles.emptyPapers}>
-                <Feather name="layers" size={40} color={Colors.textMuted} />
+                <Feather name="layers" size={40} color={colors.textMuted} />
                 <Text style={styles.emptyTitle}>No syllabus available</Text>
                 <Text style={styles.emptySubtext}>Syllabus will be added soon</Text>
               </View>
@@ -227,15 +287,39 @@ export default function SubjectScreen() {
           </View>
         ) : (
           <View style={styles.contentList}>
-            {papers.length > 0 ? (
-              papers.map((paper, i) => (
+            <View style={styles.filterRow}>
+              {(["All", "Main", "Supply", "Back"] as const).map(type => (
+                <Pressable
+                  key={type}
+                  onPress={() => {
+                    if (Platform.OS !== "web") Haptics.selectionAsync();
+                    setPaperFilter(type);
+                  }}
+                  style={[
+                    styles.filterChip,
+                    paperFilter === type && styles.filterChipActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filterText,
+                      paperFilter === type && styles.filterTextActive,
+                    ]}
+                  >
+                    {type}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            {filteredPapers.length > 0 ? (
+              filteredPapers.map((paper, i) => (
                 <PaperCard key={paper.id} paper={paper} index={i} subjectName={subject.name} />
               ))
             ) : (
               <View style={styles.emptyPapers}>
-                <MaterialCommunityIcons name="file-search-outline" size={40} color={Colors.textMuted} />
+                <MaterialCommunityIcons name="file-search-outline" size={40} color={colors.textMuted} />
                 <Text style={styles.emptyTitle}>No papers available</Text>
-                <Text style={styles.emptySubtext}>Papers will be uploaded soon</Text>
+                <Text style={styles.emptySubtext}>Try a different filter or check back soon</Text>
               </View>
             )}
           </View>
@@ -245,10 +329,9 @@ export default function SubjectScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = {
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
   },
   topBar: {
     flexDirection: "row",
@@ -256,14 +339,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.cardBorder,
     gap: 8,
   },
   backBtn: {
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: Colors.card,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -274,7 +355,6 @@ const styles = StyleSheet.create({
   topBarCode: {
     fontFamily: "Inter_700Bold",
     fontSize: 16,
-    color: Colors.text,
   },
   scrollContent: {
     paddingHorizontal: 16,
@@ -286,7 +366,6 @@ const styles = StyleSheet.create({
   subjectName: {
     fontFamily: "Inter_700Bold",
     fontSize: 24,
-    color: Colors.text,
     lineHeight: 30,
     marginBottom: 12,
   },
@@ -298,7 +377,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: Colors.card,
   },
   metaChipText: {
     fontFamily: "Inter_600SemiBold",
@@ -307,16 +385,13 @@ const styles = StyleSheet.create({
   metaChipTextMuted: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: Colors.textSecondary,
   },
   tabBar: {
     flexDirection: "row",
-    backgroundColor: Colors.card,
     borderRadius: 12,
     padding: 4,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: Colors.cardBorder,
   },
   tab: {
     flex: 1,
@@ -327,27 +402,41 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     gap: 6,
   },
-  tabActive: {
-    backgroundColor: Colors.primary + '18',
-  },
+  tabActive: {},
   tabText: {
     fontFamily: "Inter_500Medium",
     fontSize: 14,
-    color: Colors.textMuted,
   },
   tabTextActive: {
-    color: Colors.primary,
     fontFamily: "Inter_600SemiBold",
   },
   contentList: {
     gap: 10,
   },
+  filterRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 6,
+    flexWrap: "wrap",
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  filterChipActive: {},
+  filterText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
+  },
+  filterTextActive: {
+    fontFamily: "Inter_600SemiBold",
+  },
   unitCard: {
-    backgroundColor: Colors.card,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: Colors.cardBorder,
   },
   unitHeader: {
     flexDirection: "row",
@@ -358,26 +447,22 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor: Colors.primary + '20',
     alignItems: "center",
     justifyContent: "center",
   },
   unitBadgeText: {
     fontFamily: "Inter_700Bold",
     fontSize: 14,
-    color: Colors.primary,
   },
   unitTitle: {
     flex: 1,
     fontFamily: "Inter_600SemiBold",
     fontSize: 15,
-    color: Colors.text,
   },
   topicsList: {
     marginTop: 14,
     paddingTop: 14,
     borderTopWidth: 1,
-    borderTopColor: Colors.cardBorder,
     gap: 10,
   },
   topicRow: {
@@ -390,25 +475,21 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: Colors.primary,
     marginTop: 6,
   },
   topicText: {
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 14,
-    color: Colors.textSecondary,
     lineHeight: 20,
   },
   paperCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Colors.card,
     borderRadius: 14,
     padding: 16,
     gap: 14,
     borderWidth: 1,
-    borderColor: Colors.cardBorder,
   },
   paperIcon: {
     width: 44,
@@ -421,10 +502,13 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 6,
   },
+  paperActions: {
+    alignItems: "center",
+    gap: 10,
+  },
   paperTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 15,
-    color: Colors.text,
   },
   paperMeta: {
     flexDirection: "row",
@@ -447,18 +531,49 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 16,
-    color: Colors.textSecondary,
   },
   emptySubtext: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: Colors.textMuted,
   },
   errorText: {
     fontFamily: "Inter_500Medium",
     fontSize: 16,
-    color: Colors.danger,
     textAlign: "center",
     marginTop: 100,
   },
-});
+};
+
+function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
+  return StyleSheet.create({
+    ...baseStyles,
+    container: { ...baseStyles.container, backgroundColor: colors.background },
+    topBar: { ...baseStyles.topBar, borderBottomColor: colors.cardBorder },
+    backBtn: { ...baseStyles.backBtn, backgroundColor: colors.card },
+    topBarCode: { ...baseStyles.topBarCode, color: colors.text },
+    subjectName: { ...baseStyles.subjectName, color: colors.text },
+    metaChip: { ...baseStyles.metaChip, backgroundColor: colors.card },
+    metaChipTextMuted: { ...baseStyles.metaChipTextMuted, color: colors.textSecondary },
+    tabBar: { ...baseStyles.tabBar, backgroundColor: colors.card, borderColor: colors.cardBorder },
+    tabActive: { ...baseStyles.tabActive, backgroundColor: colors.primary + "18" },
+    tabText: { ...baseStyles.tabText, color: colors.textMuted },
+    tabTextActive: { ...baseStyles.tabTextActive, color: colors.primary },
+    filterChip: { ...baseStyles.filterChip, backgroundColor: colors.card, borderColor: colors.cardBorder },
+    filterChipActive: { ...baseStyles.filterChipActive, borderColor: colors.primary, backgroundColor: colors.primary + "18" },
+    filterText: { ...baseStyles.filterText, color: colors.textMuted },
+    filterTextActive: { ...baseStyles.filterTextActive, color: colors.primary },
+    unitCard: { ...baseStyles.unitCard, backgroundColor: colors.card, borderColor: colors.cardBorder },
+    unitBadge: { ...baseStyles.unitBadge, backgroundColor: colors.primary + "20" },
+    unitBadgeText: { ...baseStyles.unitBadgeText, color: colors.primary },
+    unitTitle: { ...baseStyles.unitTitle, color: colors.text },
+    topicsList: { ...baseStyles.topicsList, borderTopColor: colors.cardBorder },
+    topicDot: { ...baseStyles.topicDot, backgroundColor: colors.primary },
+    topicText: { ...baseStyles.topicText, color: colors.textSecondary },
+    paperCard: { ...baseStyles.paperCard, backgroundColor: colors.card, borderColor: colors.cardBorder },
+    paperTitle: { ...baseStyles.paperTitle, color: colors.text },
+    emptyTitle: { ...baseStyles.emptyTitle, color: colors.textSecondary },
+    emptySubtext: { ...baseStyles.emptySubtext, color: colors.textMuted },
+    errorText: { ...baseStyles.errorText, color: colors.danger },
+  });
+}
+

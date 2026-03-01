@@ -77,10 +77,23 @@
     .pdf-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; }
     .pdf-yes { background: var(--success)20; color: var(--success); }
     .pdf-no { background: var(--danger)20; color: var(--danger); }
+    .preview-frame { width: 100%; height: 70vh; border: none; border-radius: 10px; background: #0b1220; }
+    .notify-form { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .notify-form textarea { min-height: 120px; }
+    .notify-actions { display: flex; justify-content: flex-end; gap: 10px; }
     .section { display: none; }
     .section.active { display: block; }
     .seed-banner { background: var(--warning)15; border: 1px solid var(--warning)40; border-radius: 10px; padding: 16px 20px; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; }
     .seed-banner span { color: var(--warning); font-size: 14px; }
+    .app.hidden { display: none; }
+    .login-screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at top, #18253d, #0a1628); z-index: 1000; }
+    .login-card { width: 420px; max-width: 90vw; background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 28px; box-shadow: 0 20px 60px rgba(0,0,0,0.35); }
+    .login-title { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+    .login-sub { color: var(--text-muted); font-size: 13px; margin-bottom: 18px; }
+    .login-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .login-error { color: var(--danger); font-size: 12px; min-height: 16px; margin-top: 8px; }
+    .sidebar-footer { margin-top: auto; padding: 12px 20px; border-top: 1px solid var(--border); }
+    .sidebar-footer button { width: 100%; }
     @media (max-width: 768px) {
       .sidebar { width: 60px; }
       .sidebar-logo h2, .sidebar-logo small, .nav-item span { display: none; }
@@ -90,11 +103,32 @@
   </style>
 </head>
 <body>
-  <div class="sidebar">
-    <div class="sidebar-logo">
-      <h2>RGPV Papers</h2>
-      <small>Admin Panel</small>
+  <div id="login-screen" class="login-screen" style="display:none;">
+    <div class="login-card">
+      <div class="login-title">Admin Login</div>
+      <div class="login-sub">Only authorized users can manage branches, subjects, syllabus, and PDFs.</div>
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" id="login-username" placeholder="admin">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="login-password" placeholder="********">
+      </div>
+      <div class="login-actions">
+        <button class="btn btn-primary" onclick="doLogin()">Sign In</button>
+        <button class="btn btn-outline" onclick="checkSession()">Refresh</button>
+      </div>
+      <div id="login-error" class="login-error"></div>
     </div>
+  </div>
+
+  <div id="app" class="app">
+    <div class="sidebar">
+      <div class="sidebar-logo">
+        <h2>RGPV Papers</h2>
+        <small>Admin Panel</small>
+      </div>
     <div class="nav-item active" onclick="showSection('dashboard')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
       <span>Dashboard</span>
@@ -114,6 +148,25 @@
     <div class="nav-item" onclick="showSection('papers')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
       <span>Papers & PDFs</span>
+    </div>
+    <div class="nav-item" onclick="showSection('imports')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M4 17h16"/></svg>
+      <span>Bulk Import</span>
+    </div>
+    <div class="nav-item" onclick="showSection('audit')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3z"/><path d="M7 7h10"/><path d="M7 12h10"/><path d="M7 17h6"/></svg>
+      <span>Audit Log</span>
+    </div>
+    <div class="nav-item" onclick="showSection('notify')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 10-12 0c0 7-3 7-3 7h18s-3 0-3-7"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      <span>Notifications</span>
+    </div>
+    <div class="nav-item" onclick="showSection('profiles')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a6.5 6.5 0 0113 0"/></svg>
+      <span>Profiles</span>
+    </div>
+    <div class="sidebar-footer">
+      <button class="btn btn-outline" onclick="doLogout()">Logout</button>
     </div>
   </div>
 
@@ -190,7 +243,97 @@
           <option value="">All Papers</option>
         </select>
       </div>
-      <div class="card"><table><thead><tr><th>Subject</th><th>Year</th><th>Month</th><th>Type</th><th>PDF</th><th>Actions</th></tr></thead><tbody id="papers-table"></tbody></table></div>
+      <div class="card"><table><thead><tr><th>Subject</th><th>Year</th><th>Month</th><th>Type</th><th>Views</th><th>PDF</th><th>Actions</th></tr></thead><tbody id="papers-table"></tbody></table></div>
+    </div>
+
+    <!-- IMPORTS -->
+    <div id="section-imports" class="section">
+      <div class="page-header">
+        <div><h1>Bulk Import</h1><p>Upload CSV files for subjects and papers</p></div>
+      </div>
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header"><h3>Subjects CSV</h3></div>
+        <div style="padding:16px 20px;">
+          <p style="color:var(--text-muted); font-size:13px; margin-bottom:10px;">Format: <code>id,name,code,branchId,semester</code></p>
+          <input type="file" id="subjects-csv" accept=".csv" style="padding:8px;">
+          <button class="btn btn-primary" style="margin-left:10px;" onclick="importSubjects()">Upload</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Papers CSV</h3></div>
+        <div style="padding:16px 20px;">
+          <p style="color:var(--text-muted); font-size:13px; margin-bottom:10px;">Format: <code>subjectId,year,month,examType,pdfPath(optional)</code></p>
+          <input type="file" id="papers-csv" accept=".csv" style="padding:8px;">
+          <button class="btn btn-primary" style="margin-left:10px;" onclick="importPapers()">Upload</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- AUDIT LOG -->
+    <div id="section-audit" class="section">
+      <div class="page-header">
+        <div><h1>Audit Log</h1><p>Recent admin activity</p></div>
+        <button class="btn btn-outline" onclick="loadAudit()">Refresh</button>
+      </div>
+      <div class="card"><table><thead><tr><th>Time</th><th>User</th><th>Action</th><th>Entity</th><th>IP</th></tr></thead><tbody id="audit-table"></tbody></table></div>
+    </div>
+
+    <!-- NOTIFICATIONS -->
+    <div id="section-notify" class="section">
+      <div class="page-header">
+        <div><h1>Push Notifications</h1><p>Send alerts to all app users</p></div>
+        <button class="btn btn-outline" onclick="loadNotifications()">Refresh</button>
+      </div>
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header"><h3>Send Notification</h3></div>
+        <div style="padding:16px 20px;">
+          <div class="notify-form">
+            <div class="form-group" style="grid-column: span 2;">
+              <label>Title</label>
+              <input type="text" id="notify-title" placeholder="New paper uploaded">
+            </div>
+            <div class="form-group" style="grid-column: span 2;">
+              <label>Message</label>
+              <textarea id="notify-body" placeholder="CSE 5th semester papers are now available."></textarea>
+            </div>
+            <div class="form-group">
+              <label>Data (JSON, optional)</label>
+              <textarea id="notify-data" placeholder='{"screen":"papers"}'></textarea>
+            </div>
+            <div class="form-group">
+              <label>Audience</label>
+              <select id="notify-audience" disabled>
+                <option value="all" selected>All Users</option>
+              </select>
+              <small style="color:var(--text-muted); font-size:12px;">Segmentation can be added later.</small>
+            </div>
+          </div>
+          <div class="notify-actions">
+            <button class="btn btn-primary" onclick="sendNotification()">Send</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Recent Notifications</h3></div>
+        <table>
+          <thead><tr><th>Time</th><th>Title</th><th>Message</th></tr></thead>
+          <tbody id="notify-table"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PROFILES -->
+    <div id="section-profiles" class="section">
+      <div class="page-header">
+        <div><h1>User Profiles</h1><p>Collected from the app</p></div>
+        <button class="btn btn-outline" onclick="loadProfiles()">Refresh</button>
+      </div>
+      <div class="card">
+        <table>
+          <thead><tr><th>Name</th><th>Branch</th><th>Year</th><th>College</th><th>Device</th><th>Updated</th></tr></thead>
+          <tbody id="profiles-table"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -267,14 +410,68 @@
     </div>
   </div>
 
+  <!-- PDF PREVIEW MODAL -->
+  <div class="modal-overlay" id="preview-modal">
+    <div class="modal" style="width: 900px; max-width: 98vw;">
+      <div class="modal-header"><h3>PDF Preview</h3><button class="modal-close" onclick="closeModal('preview-modal')">&times;</button></div>
+      <div class="modal-body">
+        <iframe id="preview-frame" class="preview-frame" src=""></iframe>
+      </div>
+    </div>
+  </div>
+
+  </div>
+  </div>
+
   <script>
     let allBranches = [], allSubjects = [], allPapers = [];
     const API = '';
+    let isAuthed = false;
 
     async function api(url, opts = {}) {
       const res = await fetch(API + url, opts);
       if (!res.ok) { const e = await res.text(); throw new Error(e); }
       return res.json();
+    }
+
+    function setAuthState(authenticated) {
+      isAuthed = authenticated;
+      document.getElementById('login-screen').style.display = authenticated ? 'none' : 'flex';
+      document.getElementById('app').classList.toggle('hidden', !authenticated);
+    }
+
+    async function checkSession() {
+      try {
+        const res = await api('/api/admin/session');
+        setAuthState(!!res.authenticated);
+      } catch (e) {
+        setAuthState(false);
+      }
+    }
+
+    async function doLogin() {
+      const username = document.getElementById('login-username').value.trim() || 'admin';
+      const password = document.getElementById('login-password').value;
+      const errorEl = document.getElementById('login-error');
+      errorEl.textContent = '';
+      try {
+        await api('/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        setAuthState(true);
+        loadDashboard();
+      } catch (e) {
+        errorEl.textContent = 'Invalid username or password';
+      }
+    }
+
+    async function doLogout() {
+      try {
+        await api('/api/admin/logout', { method: 'POST' });
+      } catch {}
+      setAuthState(false);
     }
 
     function toast(msg, type = 'success') {
@@ -295,6 +492,10 @@
       if (name === 'subjects') loadSubjects();
       if (name === 'syllabus') { populateSubjectDropdowns(); loadSyllabus(); }
       if (name === 'papers') { populateSubjectDropdowns(); loadPapers(); }
+      if (name === 'imports') { /* no-op */ }
+      if (name === 'audit') loadAudit();
+      if (name === 'notify') loadNotifications();
+      if (name === 'profiles') loadProfiles();
     }
 
     function closeModal(id) { document.getElementById(id).classList.remove('open'); }
@@ -572,26 +773,36 @@
         }
         allPapers = papers;
         if (papers.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><p>No papers found. Add one!</p></div></td></tr>';
+          tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><p>No papers found. Add one!</p></div></td></tr>';
           return;
         }
         tbody.innerHTML = papers.map(p => {
           const subject = allSubjects.find(s => s.id === p.subjectId);
           const typeBadge = p.examType === 'Main' ? 'badge-success' : 'badge-warning';
           const pdfBadge = p.pdfPath ? `<span class="pdf-badge pdf-yes"><a href="${p.pdfPath}" target="_blank" style="color:inherit;text-decoration:none;">View PDF</a></span>` : '<span class="pdf-badge pdf-no">No PDF</span>';
+          const previewBtn = p.pdfPath ? `<button class="btn btn-outline btn-sm" onclick="previewPdf('${p.pdfPath}')">Preview</button>` : '';
           return `<tr>
             <td>${subject ? subject.code + ' - ' + subject.name : p.subjectId}</td>
             <td>${p.year}</td>
             <td>${p.month}</td>
             <td><span class="badge ${typeBadge}">${p.examType}</span></td>
+            <td>${p.views || 0}</td>
             <td>${pdfBadge}</td>
             <td class="actions-cell">
+              ${previewBtn}
               <button class="btn btn-outline btn-sm" onclick='editPaper(${JSON.stringify(p).replace(/'/g, "\\'")})'>Edit</button>
               <button class="btn btn-danger btn-sm" onclick="deletePaper(${p.id})">Delete</button>
             </td>
           </tr>`;
         }).join('');
       } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function previewPdf(path) {
+      if (!path) return;
+      const frame = document.getElementById('preview-frame');
+      frame.src = path;
+      openModal('preview-modal');
     }
 
     function openPaperModal(paper) {
@@ -639,8 +850,120 @@
       } catch (e) { toast(e.message, 'error'); }
     }
 
+    async function importSubjects() {
+      const file = document.getElementById('subjects-csv').files[0];
+      if (!file) return toast('Select a CSV file', 'error');
+      const form = new FormData();
+      form.append('file', file);
+      try {
+        const res = await fetch(API + '/api/admin/import/subjects', { method: 'POST', body: form });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        toast(`Imported: ${data.created}, Skipped: ${data.skipped}, Errors: ${data.errors}`);
+        loadSubjects();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function importPapers() {
+      const file = document.getElementById('papers-csv').files[0];
+      if (!file) return toast('Select a CSV file', 'error');
+      const form = new FormData();
+      form.append('file', file);
+      try {
+        const res = await fetch(API + '/api/admin/import/papers', { method: 'POST', body: form });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        toast(`Imported: ${data.created}, Skipped: ${data.skipped}, Errors: ${data.errors}`);
+        loadPapers();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function loadAudit() {
+      try {
+        const logs = await api('/api/admin/audit?limit=200');
+        const tbody = document.getElementById('audit-table');
+        if (!logs.length) {
+          tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state"><p>No audit entries yet.</p></div></td></tr>';
+          return;
+        }
+        tbody.innerHTML = logs.map(l => {
+          const time = l.createdAt ? new Date(l.createdAt).toLocaleString() : '';
+          return `<tr>
+            <td>${time}</td>
+            <td>${l.userId || '-'}</td>
+            <td>${l.action}</td>
+            <td>${l.entity} ${l.entityId || ''}</td>
+            <td>${l.ip || '-'}</td>
+          </tr>`;
+        }).join('');
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function sendNotification() {
+      const title = document.getElementById('notify-title').value.trim();
+      const body = document.getElementById('notify-body').value.trim();
+      const dataRaw = document.getElementById('notify-data').value.trim();
+      if (!title || !body) return toast('Title and message required', 'error');
+      let data = {};
+      if (dataRaw) {
+        try { data = JSON.parse(dataRaw); } catch { return toast('Invalid JSON in data field', 'error'); }
+      }
+      try {
+        const res = await api('/api/admin/notify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, body, data }),
+        });
+        toast(`Sent to ${res.sent} devices`);
+        document.getElementById('notify-title').value = '';
+        document.getElementById('notify-body').value = '';
+        document.getElementById('notify-data').value = '';
+        loadNotifications();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function loadNotifications() {
+      try {
+        const data = await api('/api/notifications?limit=100');
+        const tbody = document.getElementById('notify-table');
+        if (!data.length) {
+          tbody.innerHTML = '<tr><td colspan="3"><div class="empty-state"><p>No notifications yet.</p></div></td></tr>';
+          return;
+        }
+        tbody.innerHTML = data.map(n => {
+          const time = n.createdAt ? new Date(n.createdAt).toLocaleString() : '';
+          return `<tr><td>${time}</td><td><strong>${n.title}</strong></td><td>${n.body}</td></tr>`;
+        }).join('');
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function loadProfiles() {
+      try {
+        const data = await api('/api/admin/profiles');
+        const tbody = document.getElementById('profiles-table');
+        if (!data.length) {
+          tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><p>No profiles yet.</p></div></td></tr>';
+          return;
+        }
+        tbody.innerHTML = data.map(p => {
+          const time = p.updatedAt ? new Date(p.updatedAt).toLocaleString() : '';
+          return `<tr>
+            <td><strong>${p.name}</strong></td>
+            <td>${p.branchId}</td>
+            <td>${p.year}</td>
+            <td>${p.collegeName}</td>
+            <td>${p.deviceId}</td>
+            <td>${time}</td>
+          </tr>`;
+        }).join('');
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
     // Init
-    loadDashboard();
+    checkSession().then(() => {
+      if (isAuthed) loadDashboard();
+    });
   </script>
 </body>
 </html>
+

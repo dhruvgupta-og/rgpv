@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: rgpv-api
+    env: node
+    plan: free
+    buildCommand: npm install && npm run server:build
+    startCommand: node server_dist/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ADMIN_BOOTSTRAP_USERNAME
+        value: admin
+      - key: ADMIN_BOOTSTRAP_PASSWORD
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: EXPO_PUBLIC_API_URL
+        sync: false

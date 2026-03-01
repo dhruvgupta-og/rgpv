@@ -2,10 +2,10 @@ import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs } from "expo-router";
 import { NativeTabs, Icon, Label } from "expo-router/unstable-native-tabs";
 import { BlurView } from "expo-blur";
-import { Platform, StyleSheet, useColorScheme, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
-import Colors from "@/constants/colors";
+import { useTheme } from "@/lib/theme";
 
 function NativeTabLayout() {
   return (
@@ -18,9 +18,9 @@ function NativeTabLayout() {
         <Icon sf={{ default: "magnifyingglass", selected: "magnifyingglass" }} />
         <Label>Search</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="bookmarks">
-        <Icon sf={{ default: "bookmark", selected: "bookmark.fill" }} />
-        <Label>Saved</Label>
+      <NativeTabs.Trigger name="notifications">
+        <Icon sf={{ default: "bell", selected: "bell.fill" }} />
+        <Label>Alerts</Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   );
@@ -29,18 +29,19 @@ function NativeTabLayout() {
 function ClassicTabLayout() {
   const isWeb = Platform.OS === "web";
   const isIOS = Platform.OS === "ios";
+  const { colors } = useTheme();
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: Colors.primary,
-        tabBarInactiveTintColor: Colors.textMuted,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: {
           position: "absolute",
-          backgroundColor: isIOS ? "transparent" : Colors.tabBar,
+          backgroundColor: isIOS ? "transparent" : colors.tabBar,
           borderTopWidth: isWeb ? 1 : 0,
-          borderTopColor: Colors.cardBorder,
+          borderTopColor: colors.cardBorder,
           elevation: 0,
           ...(isWeb ? { height: 84 } : {}),
         },
@@ -52,7 +53,7 @@ function ClassicTabLayout() {
               style={StyleSheet.absoluteFill}
             />
           ) : isWeb ? (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: Colors.tabBar }]} />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.tabBar }]} />
           ) : null,
       }}
     >
@@ -75,11 +76,11 @@ function ClassicTabLayout() {
         }}
       />
       <Tabs.Screen
-        name="bookmarks"
+        name="notifications"
         options={{
-          title: "Saved",
+          title: "Alerts",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="bookmark" size={size} color={color} />
+            <Ionicons name="notifications" size={size} color={color} />
           ),
         }}
       />
