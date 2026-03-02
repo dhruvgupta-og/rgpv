@@ -76,7 +76,9 @@ function PaperCard({ paper, index, subjectName }: { paper: Paper; index: number;
       return;
     }
     if (paper.pdfPath) {
-      const pdfUrl = getApiUrl() + paper.pdfPath.replace(/^\//, '');
+      const pdfUrl = paper.pdfPath.startsWith("http")
+        ? paper.pdfPath
+        : getApiUrl() + paper.pdfPath.replace(/^\//, '');
       Linking.openURL(pdfUrl);
       markView();
     } else {
@@ -92,7 +94,9 @@ function PaperCard({ paper, index, subjectName }: { paper: Paper; index: number;
     if (!paper.pdfPath || downloading) return;
     setDownloading(true);
     try {
-      const pdfUrl = getApiUrl() + paper.pdfPath.replace(/^\//, '');
+      const pdfUrl = paper.pdfPath.startsWith("http")
+        ? paper.pdfPath
+        : getApiUrl() + paper.pdfPath.replace(/^\//, '');
       const item = await downloadPaper({
         id: String(paper.id),
         subjectId: paper.subjectId,

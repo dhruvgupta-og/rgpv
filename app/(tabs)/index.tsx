@@ -64,7 +64,9 @@ function RecentPaperCard({ paper, subject }: { paper: Paper; subject?: Subject }
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     if (paper.pdfPath) {
-      const pdfUrl = getApiUrl() + paper.pdfPath.replace(/^\//, "");
+      const pdfUrl = paper.pdfPath.startsWith("http")
+        ? paper.pdfPath
+        : getApiUrl() + paper.pdfPath.replace(/^\//, "");
       Linking.openURL(pdfUrl);
       return;
     }

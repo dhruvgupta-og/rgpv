@@ -5,6 +5,7 @@ import path from "path";
 import fs from "fs";
 import { storage } from "./storage";
 import { getAdminSession, createAdminSession, clearAdminSession, ensureBootstrapAdmin } from "./auth";
+import { getStorageBucket } from "./firebase";
 
 const uploadsDir = path.resolve(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) {
@@ -12,13 +13,7 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, uploadsDir),
-    filename: (_req, file, cb) => {
-      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-      cb(null, uniqueSuffix + path.extname(file.originalname));
-    },
-  }),
+  storage: multer.memoryStorage(),
   fileFilter: (_req, file, cb) => {
     if (file.mimetype === "application/pdf") {
       cb(null, true);
@@ -28,6 +23,22 @@ const upload = multer({
   },
   limits: { fileSize: 20 * 1024 * 1024 },
 });
+
+async function uploadPdfToFirebase(file: Express.Multer.File) {
+  const bucket = getStorageBucket();
+  const safeName = file.originalname.replace(/[^a-zA-Z0-9_.-]/g, "_");
+  const fileName = `papers/${Date.now()}-${safeName}`;
+  const fileRef = bucket.file(fileName);
+  await fileRef.save(file.buffer, {
+    contentType: file.mimetype,
+    resumable: false,
+  });
+  const [url] = await fileRef.getSignedUrl({
+    action: "read",
+    expires: "2036-01-01",
+  });
+  return url;
+}
 
 const csvUpload = multer({
   storage: multer.memoryStorage(),
@@ -452,7 +463,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/papers", requireAdmin, upload.single("pdf"), async (req: Request, res: Response) => {
     try {
-      const pdfPath = req.file ? `/uploads/${req.file.filename}` : null;
+      const pdfPath = req.file ? await uploadPdfToFirebase(req.file) : null;
       const paper = await storage.createPaper({
         subjectId: req.body.subjectId,
         year: req.body.year,
@@ -482,12 +493,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (req.body.examType) updateData.examType = req.body.examType;
       if (req.body.subjectId) updateData.subjectId = req.body.subjectId;
       if (req.file) {
-        const existingPaper = await storage.getPaper(Number(req.params.id));
-        if (existingPaper?.pdfPath) {
-          const oldPath = path.resolve(process.cwd(), existingPaper.pdfPath.replace(/^\//, ""));
-          if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-        }
-        updateData.pdfPath = `/uploads/${req.file.filename}`;
+        updateData.pdfPath = await uploadPdfToFirebase(req.file);
       }
       const paper = await storage.updatePaper(Number(req.params.id), updateData);
       if (!paper) return res.status(404).json({ error: "Not found" });

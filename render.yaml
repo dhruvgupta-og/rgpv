@@ -8,9 +8,13 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: FIREBASE_STORAGE_BUCKET
+        value: rgpv-01.appspot.com
       - key: ADMIN_BOOTSTRAP_USERNAME
         value: admin
       - key: ADMIN_BOOTSTRAP_PASSWORD
+        sync: false
+      - key: FIREBASE_ADMIN_CREDENTIALS_JSON
         sync: false
       - key: DATABASE_URL
         sync: false

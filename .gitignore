@@ -39,3 +39,5 @@ yarn-error.*
 .vercel
 
 .env
+firebase-admin.json
+rgpv-01-firebase-adminsdk-fbsvc-bd0c8f74d5.json
