@@ -11,13 +11,31 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://rgpv-1-whf7.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://rgpv-1-whf7.onrender.com",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyBDpuPNYNnPj5uev9mLeSELDeZmH9o5qbY",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "rgpv-01.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "rgpv-01",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "rgpv-01.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "100975426315",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:100975426315:web:e7df346dba5a52386d400e",
+        "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-Y1VM1LY3PQ",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "100975426315-bgprrau27vhkb255m5c25gvp08vg56b9.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "100975426315-olvcniuctnr880to7t3uj5dqt5urc0u7.apps.googleusercontent.com"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://rgpv-1-whf7.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://rgpv-1-whf7.onrender.com",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyBDpuPNYNnPj5uev9mLeSELDeZmH9o5qbY",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "rgpv-01.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "rgpv-01",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "rgpv-01.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "100975426315",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:100975426315:web:e7df346dba5a52386d400e",
+        "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-Y1VM1LY3PQ",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "100975426315-bgprrau27vhkb255m5c25gvp08vg56b9.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "100975426315-olvcniuctnr880to7t3uj5dqt5urc0u7.apps.googleusercontent.com"
       }
     },
     "apk": {
@@ -25,7 +43,16 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://rgpv-1-whf7.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://rgpv-1-whf7.onrender.com",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyBDpuPNYNnPj5uev9mLeSELDeZmH9o5qbY",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "rgpv-01.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "rgpv-01",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "rgpv-01.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "100975426315",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:100975426315:web:e7df346dba5a52386d400e",
+        "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-Y1VM1LY3PQ",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "100975426315-bgprrau27vhkb255m5c25gvp08vg56b9.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "100975426315-olvcniuctnr880to7t3uj5dqt5urc0u7.apps.googleusercontent.com"
       }
     }
   },

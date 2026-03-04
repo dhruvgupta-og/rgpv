@@ -149,6 +149,18 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
       <span>Papers & PDFs</span>
     </div>
+    <div class="nav-item" onclick="showSection('quick-papers')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18"/><path d="M12 3v18"/><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+      <span>Quick Papers</span>
+    </div>
+    <div class="nav-item" onclick="showSection('videos')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="15" height="10" rx="2"/><polygon points="23 7 16 12 23 17 23 7"/></svg>
+      <span>Videos</span>
+    </div>
+    <div class="nav-item" onclick="showSection('analyzer')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+      <span>PYQ Analyzer</span>
+    </div>
     <div class="nav-item" onclick="showSection('imports')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M4 17h16"/></svg>
       <span>Bulk Import</span>
@@ -246,15 +258,97 @@
       <div class="card"><table><thead><tr><th>Subject</th><th>Year</th><th>Month</th><th>Type</th><th>Views</th><th>PDF</th><th>Actions</th></tr></thead><tbody id="papers-table"></tbody></table></div>
     </div>
 
+    <!-- QUICK ADD PAPERS -->
+    <div id="section-quick-papers" class="section">
+      <div class="page-header">
+        <div><h1>Quick Add Papers</h1><p>Add many papers with Google Drive links</p></div>
+        <button class="btn btn-primary" onclick="addPaperRow()">+ Add Row</button>
+      </div>
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header"><h3>Bulk Entry Table</h3></div>
+        <div style="padding:16px 20px;">
+          <div style="overflow:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Subject</th>
+                  <th>Year</th>
+                  <th>Month</th>
+                  <th>Type</th>
+                  <th>Drive Link</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="quick-papers-table"></tbody>
+            </table>
+          </div>
+          <div style="display:flex; justify-content:flex-end; margin-top:12px; gap:10px;">
+            <button class="btn btn-outline" onclick="clearPaperRows()">Clear</button>
+            <button class="btn btn-primary" onclick="savePaperRows()">Save All</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Fix Wrong Subject ID</h3></div>
+        <div style="padding:16px 20px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+          <input type="text" id="reassign-from" placeholder="Wrong subjectId (e.g. 4)" style="min-width:220px;">
+          <select id="reassign-to" style="min-width:280px;"></select>
+          <button class="btn btn-danger" onclick="reassignPapers()">Move Papers</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIDEOS -->
+    <div id="section-videos" class="section">
+      <div class="page-header">
+        <div><h1>Videos</h1><p>Manage YouTube links for each subject</p></div>
+        <button class="btn btn-primary" onclick="openVideoModal()">+ Add Video</button>
+      </div>
+      <div style="margin-bottom:16px;">
+        <select id="video-subject-filter" onchange="loadVideos()" style="padding:8px 12px; background:var(--card); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:14px; min-width: 300px;">
+          <option value="">Select a subject</option>
+        </select>
+      </div>
+      <div class="card"><table><thead><tr><th>Title</th><th>Subject</th><th>Link</th><th>Actions</th></tr></thead><tbody id="videos-table"></tbody></table></div>
+    </div>
+
+    <!-- PYQ ANALYZER -->
+    <div id="section-analyzer" class="section">
+      <div class="page-header">
+        <div><h1>Smart PYQ Analyzer</h1><p>Topic-wise frequency, repeated questions, unit weightage, and 5-year trend</p></div>
+        <button class="btn btn-outline" onclick="loadAnalytics()">Refresh</button>
+      </div>
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header"><h3>Subject Analyzer Data</h3></div>
+        <div style="padding:16px 20px;">
+          <div class="form-group">
+            <label>Subject</label>
+            <select id="analyzer-subject" onchange="loadAnalytics()" style="padding:8px 12px; background:var(--card); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:14px; min-width: 300px;">
+              <option value="">Select a subject</option>
+            </select>
+          </div>
+          <div id="analyzer-units"></div>
+          <div style="display:flex; justify-content:space-between; gap:10px;">
+            <button class="btn btn-outline" onclick="addAnalyzerUnit()">+ Add Unit</button>
+            <button class="btn btn-primary" onclick="saveAnalytics()">Save Analyzer</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- IMPORTS -->
     <div id="section-imports" class="section">
       <div class="page-header">
         <div><h1>Bulk Import</h1><p>Upload CSV files for subjects and papers</p></div>
       </div>
       <div class="card" style="margin-bottom:16px;">
-        <div class="card-header"><h3>Subjects CSV</h3></div>
+        <div class="card-header"><h3>Subjects + Syllabus CSV</h3></div>
         <div style="padding:16px 20px;">
-          <p style="color:var(--text-muted); font-size:13px; margin-bottom:10px;">Format: <code>id,name,code,branchId,semester</code></p>
+          <p style="color:var(--text-muted); font-size:13px; margin-bottom:10px;">
+            Required: <code>id,name,code,branchId,semester</code><br>
+            Optional syllabus: <code>unit1_title,unit1_topics,unit2_title,unit2_topics,...,unit8_title,unit8_topics</code><br>
+            Topics can be separated by <code>|</code> or new lines.
+          </p>
           <input type="file" id="subjects-csv" accept=".csv" style="padding:8px;">
           <button class="btn btn-primary" style="margin-left:10px;" onclick="importSubjects()">Upload</button>
         </div>
@@ -262,7 +356,11 @@
       <div class="card">
         <div class="card-header"><h3>Papers CSV</h3></div>
         <div style="padding:16px 20px;">
-          <p style="color:var(--text-muted); font-size:13px; margin-bottom:10px;">Format: <code>subjectId,year,month,examType,pdfPath(optional)</code></p>
+          <p style="color:var(--text-muted); font-size:13px; margin-bottom:10px;">
+            Format: <code>subjectCode or subjectName,year,month,examType,pdfPath(optional)</code><br>
+            Accepted headers: <code>subjectId</code>, <code>subjectCode</code>, or <code>subjectName</code>.<br>
+            You can paste a Google Drive share link in <code>pdfPath</code>.
+          </p>
           <input type="file" id="papers-csv" accept=".csv" style="padding:8px;">
           <button class="btn btn-primary" style="margin-left:10px;" onclick="importPapers()">Upload</button>
         </div>
@@ -315,10 +413,10 @@
       </div>
       <div class="card">
         <div class="card-header"><h3>Recent Notifications</h3></div>
-        <table>
-          <thead><tr><th>Time</th><th>Title</th><th>Message</th></tr></thead>
-          <tbody id="notify-table"></tbody>
-        </table>
+          <table>
+            <thead><tr><th>Time</th><th>Title</th><th>Message</th><th>Actions</th></tr></thead>
+            <tbody id="notify-table"></tbody>
+          </table>
       </div>
     </div>
 
@@ -405,8 +503,23 @@
         </div>
         <div class="form-group"><label>Exam Type</label><select id="paper-type"><option value="Main">Main</option><option value="Supply">Supplementary</option><option value="Back">Back</option></select></div>
         <div class="form-group"><label>Upload PDF (max 20MB)</label><input type="file" id="paper-pdf" accept="application/pdf" style="padding:8px;"></div>
+        <div class="form-group"><label>Or paste PDF/Google Drive link</label><input type="text" id="paper-pdf-link" placeholder="https://drive.google.com/file/d/..."></div>
       </div>
       <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('paper-modal')">Cancel</button><button class="btn btn-primary" onclick="savePaper()">Save</button></div>
+    </div>
+  </div>
+
+  <!-- VIDEO MODAL -->
+  <div class="modal-overlay" id="video-modal">
+    <div class="modal">
+      <div class="modal-header"><h3 id="video-modal-title">Add Video</h3><button class="modal-close" onclick="closeModal('video-modal')">&times;</button></div>
+      <div class="modal-body">
+        <input type="hidden" id="video-edit-id">
+        <div class="form-group"><label>Subject</label><select id="video-subject"></select></div>
+        <div class="form-group"><label>Video Title</label><input type="text" id="video-title" placeholder="Data Structures - Trees"></div>
+        <div class="form-group"><label>YouTube Link</label><input type="text" id="video-url" placeholder="https://www.youtube.com/watch?v=..."></div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('video-modal')">Cancel</button><button class="btn btn-primary" onclick="saveVideo()">Save</button></div>
     </div>
   </div>
 
@@ -424,7 +537,7 @@
   </div>
 
   <script>
-    let allBranches = [], allSubjects = [], allPapers = [];
+    let allBranches = [], allSubjects = [], allPapers = [], allVideos = [];
     const API = '';
     let isAuthed = false;
 
@@ -492,6 +605,9 @@
       if (name === 'subjects') loadSubjects();
       if (name === 'syllabus') { populateSubjectDropdowns(); loadSyllabus(); }
       if (name === 'papers') { populateSubjectDropdowns(); loadPapers(); }
+      if (name === 'quick-papers') { populateSubjectDropdowns(); initQuickPapers(); }
+      if (name === 'videos') { populateSubjectDropdowns(); loadVideos(); }
+      if (name === 'analyzer') { populateSubjectDropdowns(); loadAnalytics(); }
       if (name === 'imports') { /* no-op */ }
       if (name === 'audit') loadAudit();
       if (name === 'notify') loadNotifications();
@@ -692,6 +808,10 @@
         document.getElementById('syllabus-subject').innerHTML = opts;
         document.getElementById('paper-subject-filter').innerHTML = '<option value="">All Papers</option>' + opts;
         document.getElementById('paper-subject').innerHTML = opts;
+        document.getElementById('video-subject-filter').innerHTML = '<option value="">Select a subject</option>' + opts;
+        document.getElementById('video-subject').innerHTML = opts;
+        document.getElementById('analyzer-subject').innerHTML = '<option value="">Select a subject</option>' + opts;
+        document.getElementById('reassign-to').innerHTML = opts;
       });
     }
 
@@ -813,6 +933,7 @@
       document.getElementById('paper-month').value = paper ? paper.month : 'Dec';
       document.getElementById('paper-type').value = paper ? paper.examType : 'Main';
       document.getElementById('paper-pdf').value = '';
+      document.getElementById('paper-pdf-link').value = paper?.pdfPath || '';
       openModal('paper-modal');
     }
 
@@ -826,7 +947,9 @@
       formData.append('month', document.getElementById('paper-month').value);
       formData.append('examType', document.getElementById('paper-type').value);
       const pdfFile = document.getElementById('paper-pdf').files[0];
+      const pdfLink = document.getElementById('paper-pdf-link').value.trim();
       if (pdfFile) formData.append('pdf', pdfFile);
+      if (!pdfFile && pdfLink) formData.append('pdfUrl', pdfLink);
       if (!formData.get('subjectId') || !formData.get('year')) { toast('Fill all required fields', 'error'); return; }
       try {
         if (editId) {
@@ -848,6 +971,251 @@
         toast('Paper deleted');
         loadPapers();
       } catch (e) { toast(e.message, 'error'); }
+    }
+
+    // ---- QUICK PAPERS ----
+    function initQuickPapers() {
+      const tbody = document.getElementById('quick-papers-table');
+      if (tbody.children.length === 0) addPaperRow();
+    }
+
+    function addPaperRow(data = {}) {
+      const tbody = document.getElementById('quick-papers-table');
+      const subjectOptions = allSubjects.map(s => `<option value="${s.code}">${s.code} - ${s.name}</option>`).join('');
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>
+          <select data-field="subjectCode" style="padding:6px 8px; background:var(--bg-light); border:1px solid var(--border); border-radius:6px; color:var(--text);">
+            ${subjectOptions}
+          </select>
+        </td>
+        <td><input data-field="year" type="text" value="${data.year || ''}" placeholder="2024" style="width:80px;"></td>
+        <td>
+          <select data-field="month" style="padding:6px 8px; background:var(--bg-light); border:1px solid var(--border); border-radius:6px; color:var(--text);">
+            ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map(m => `<option ${data.month===m?'selected':''}>${m}</option>`).join('')}
+          </select>
+        </td>
+        <td>
+          <select data-field="examType" style="padding:6px 8px; background:var(--bg-light); border:1px solid var(--border); border-radius:6px; color:var(--text);">
+            ${["Main","Supply","Back"].map(t => `<option ${data.examType===t?'selected':''}>${t}</option>`).join('')}
+          </select>
+        </td>
+        <td><input data-field="pdfPath" type="text" value="${data.pdfPath || ''}" placeholder="Drive link or PDF URL" style="min-width:260px;"></td>
+        <td><button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove()">Remove</button></td>
+      `;
+      tbody.appendChild(row);
+      if (data.subjectCode) row.querySelector('[data-field="subjectCode"]').value = data.subjectCode;
+    }
+
+    function clearPaperRows() {
+      document.getElementById('quick-papers-table').innerHTML = '';
+      addPaperRow();
+    }
+
+    async function savePaperRows() {
+      const rows = Array.from(document.querySelectorAll('#quick-papers-table tr'));
+      const items = rows.map(row => {
+        const getVal = (name) => row.querySelector(`[data-field="${name}"]`)?.value?.trim?.() || '';
+        return {
+          subjectCode: getVal('subjectCode'),
+          year: getVal('year'),
+          month: getVal('month'),
+          examType: getVal('examType'),
+          pdfPath: getVal('pdfPath'),
+        };
+      });
+
+      try {
+        const res = await api('/api/admin/papers/bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items }),
+        });
+        toast(`Saved: ${res.created}, Skipped: ${res.skipped}, Errors: ${res.errors}`);
+        clearPaperRows();
+        loadPapers();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function reassignPapers() {
+      const fromSubjectId = document.getElementById('reassign-from').value.trim();
+      const toSubjectId = document.getElementById('reassign-to').value;
+      if (!fromSubjectId || !toSubjectId) return toast('Provide both IDs', 'error');
+      try {
+        const res = await api('/api/admin/papers/reassign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fromSubjectId, toSubjectId }),
+        });
+        toast(`Moved ${res.updated} papers`);
+        loadPapers();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    // ---- VIDEOS ----
+    async function loadVideos() {
+      const subjectId = document.getElementById('video-subject-filter').value;
+      const tbody = document.getElementById('videos-table');
+      if (!subjectId) { tbody.innerHTML = '<tr><td colspan="4"><div class="empty-state"><p>Select a subject to view videos</p></div></td></tr>'; return; }
+      try {
+        const videos = await api('/api/subjects/' + subjectId + '/videos');
+        allVideos = videos;
+        if (videos.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4"><div class="empty-state"><p>No videos found. Add one!</p></div></td></tr>';
+          return;
+        }
+        tbody.innerHTML = videos.map(v => {
+          const subject = allSubjects.find(s => s.id === v.subjectId);
+          const link = `<a href="${v.url}" target="_blank" style="color:inherit;text-decoration:none;">Open</a>`;
+          return `<tr>
+            <td><strong>${v.title}</strong></td>
+            <td>${subject ? subject.code + ' - ' + subject.name : v.subjectId}</td>
+            <td>${link}</td>
+            <td class="actions-cell">
+              <button class="btn btn-outline btn-sm" onclick='editVideo(${JSON.stringify(v).replace(/'/g, "\\'")})'>Edit</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteVideo(${v.id})">Delete</button>
+            </td>
+          </tr>`;
+        }).join('');
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function openVideoModal(video) {
+      document.getElementById('video-modal-title').textContent = video ? 'Edit Video' : 'Add Video';
+      document.getElementById('video-edit-id').value = video ? video.id : '';
+      document.getElementById('video-subject').value = video ? video.subjectId : (document.getElementById('video-subject-filter').value || allSubjects[0]?.id || '');
+      document.getElementById('video-title').value = video ? video.title : '';
+      document.getElementById('video-url').value = video ? video.url : '';
+      openModal('video-modal');
+    }
+
+    function editVideo(video) { openVideoModal(video); }
+
+    async function saveVideo() {
+      const editId = document.getElementById('video-edit-id').value;
+      const data = {
+        subjectId: document.getElementById('video-subject').value,
+        title: document.getElementById('video-title').value.trim(),
+        url: document.getElementById('video-url').value.trim(),
+      };
+      if (!data.subjectId || !data.title || !data.url) { toast('Fill all required fields', 'error'); return; }
+      try {
+        if (editId) {
+          await api('/api/videos/' + editId, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+          toast('Video updated');
+        } else {
+          await api('/api/videos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+          toast('Video created');
+        }
+        closeModal('video-modal');
+        loadVideos();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function deleteVideo(id) {
+      if (!confirm('Delete this video?')) return;
+      try {
+        await api('/api/videos/' + id, { method: 'DELETE' });
+        toast('Video deleted');
+        loadVideos();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    // ---- PYQ ANALYZER ----
+    async function loadAnalytics() {
+      const subjectId = document.getElementById('analyzer-subject').value;
+      if (!subjectId) return;
+      try {
+        const data = await api('/api/subjects/' + subjectId + '/analytics');
+        renderAnalyzerUnits(data?.units || []);
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function saveAnalytics() {
+      const subjectId = document.getElementById('analyzer-subject').value;
+      if (!subjectId) return toast('Select a subject', 'error');
+
+      const units = Array.from(document.querySelectorAll('.analyzer-unit')).map((el) => {
+        const unit = el.querySelector('[data-unit="unit"]').value.trim();
+        const percentage = Number(el.querySelector('[data-unit="weightage"]').value) || 0;
+        const topics = el.querySelector('[data-unit="topics"]').value
+          .split('\n').map(l => l.trim()).filter(Boolean);
+        const repeated = el.querySelector('[data-unit="repeated"]').value
+          .split('\n').map(l => l.trim()).filter(Boolean);
+        const trend = el.querySelector('[data-unit="trend"]').value
+          .split('\n').map(l => l.trim())
+          .filter(Boolean)
+          .map(line => {
+            const parts = line.split('=');
+            if (parts.length < 2) return null;
+            return { year: parts[0].trim(), count: Number(parts.slice(1).join('=').trim()) || 0 };
+          })
+          .filter(Boolean);
+        return { unit, percentage, topics, repeated, trend };
+      }).filter(u => u.unit);
+
+      const payload = {
+        units,
+      };
+
+      try {
+        await api('/api/analytics/' + subjectId, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        toast('Analyzer saved');
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function addAnalyzerUnit(data = {}) {
+      const wrap = document.getElementById('analyzer-units');
+      const idx = wrap.children.length + 1;
+      const unit = data.unit || `Unit ${idx}`;
+      const percentage = data.percentage ?? '';
+      const topics = (data.topics || []).join('\n');
+      const repeated = (data.repeated || []).join('\n');
+      const trend = (data.trend || []).map(t => `${t.year}=${t.count}`).join('\n');
+      const html = `
+        <div class="card analyzer-unit" style="margin-bottom:16px; padding:16px;">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Unit Name</label>
+              <input type="text" data-unit="unit" value="${unit}">
+            </div>
+            <div class="form-group">
+              <label>Weightage %</label>
+              <input type="number" data-unit="weightage" value="${percentage}">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Topics (one per line)</label>
+              <textarea data-unit="topics" rows="5">${topics}</textarea>
+            </div>
+            <div class="form-group">
+              <label>Repeated Questions (one per line)</label>
+              <textarea data-unit="repeated" rows="5">${repeated}</textarea>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>5-Year Trend (one per line: 2020=8)</label>
+            <textarea data-unit="trend" rows="4">${trend}</textarea>
+          </div>
+          <div style="display:flex; justify-content:flex-end;">
+            <button class="btn btn-danger btn-sm" onclick="this.closest('.analyzer-unit').remove()">Remove Unit</button>
+          </div>
+        </div>
+      `;
+      const container = document.createElement('div');
+      container.innerHTML = html;
+      wrap.appendChild(container.firstElementChild);
+    }
+
+    function renderAnalyzerUnits(units) {
+      const wrap = document.getElementById('analyzer-units');
+      wrap.innerHTML = '';
+      if (!units || !units.length) {
+        addAnalyzerUnit();
+        return;
+      }
+      units.forEach(u => addAnalyzerUnit(u));
     }
 
     async function importSubjects() {
@@ -927,13 +1295,29 @@
         const data = await api('/api/notifications?limit=100');
         const tbody = document.getElementById('notify-table');
         if (!data.length) {
-          tbody.innerHTML = '<tr><td colspan="3"><div class="empty-state"><p>No notifications yet.</p></div></td></tr>';
+          tbody.innerHTML = '<tr><td colspan="4"><div class="empty-state"><p>No notifications yet.</p></div></td></tr>';
           return;
         }
         tbody.innerHTML = data.map(n => {
           const time = n.createdAt ? new Date(n.createdAt).toLocaleString() : '';
-          return `<tr><td>${time}</td><td><strong>${n.title}</strong></td><td>${n.body}</td></tr>`;
+          return `<tr>
+            <td>${time}</td>
+            <td><strong>${n.title}</strong></td>
+            <td>${n.body}</td>
+            <td class="actions-cell">
+              <button class="btn btn-danger btn-sm" onclick="deleteNotification('${n.id}')">Delete</button>
+            </td>
+          </tr>`;
         }).join('');
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function deleteNotification(id) {
+      if (!confirm('Delete this notification?')) return;
+      try {
+        await api('/api/notifications/' + id, { method: 'DELETE' });
+        toast('Notification deleted');
+        loadNotifications();
       } catch (e) { toast(e.message, 'error'); }
     }
 

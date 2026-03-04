@@ -6,6 +6,7 @@ export interface Subject {
   semester: number;
   syllabus?: SyllabusUnit[];
   papers?: Paper[];
+  videos?: Video[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -26,6 +27,27 @@ export interface Paper {
   examType: string;
   pdfPath?: string | null;
   views?: number;
+  createdAt?: string;
+}
+
+export interface Video {
+  id: number;
+  subjectId: string;
+  title: string;
+  url: string;
+  createdAt?: string;
+}
+
+export interface PyqAnalytics {
+  subjectId: string;
+  units?: {
+    unit: string;
+    percentage?: number;
+    topics?: string[];
+    repeated?: string[];
+    trend?: { year: string; count: number }[];
+  }[];
+  updatedAt?: string;
   createdAt?: string;
 }
 

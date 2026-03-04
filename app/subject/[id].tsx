@@ -6,13 +6,15 @@ import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useQuery } from "@tanstack/react-query";
-import type { Branch, Subject, SyllabusUnit, Paper } from "@/lib/rgpv-data";
+import type { Branch, Subject, SyllabusUnit, Paper, Video, PyqAnalytics } from "@/lib/rgpv-data";
 import { useBookmarks } from "@/lib/bookmarks";
 import { getApiUrl, apiRequest } from "@/lib/query-client";
+import { getViewerUrl } from "@/lib/pdf-viewer";
 import { useTheme } from "@/lib/theme";
 import { downloadPaper, isDownloaded, openDownload, shareDownload, type DownloadItem } from "@/lib/downloads";
+import { ensureProfileComplete } from "@/lib/profile-guard";
 
-type TabType = "syllabus" | "papers";
+type TabType = "syllabus" | "papers" | "videos" | "analyzer";
 
 function SyllabusUnitCard({ unit, index }: { unit: SyllabusUnit; index: number }) {
   const [expanded, setExpanded] = useState(index === 0);
@@ -70,6 +72,8 @@ function PaperCard({ paper, index, subjectName }: { paper: Paper; index: number;
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
+    const ok = await ensureProfileComplete(() => router.replace("/profile"));
+    if (!ok) return;
     if (downloaded) {
       await openDownload(downloaded);
       markView();
@@ -78,8 +82,8 @@ function PaperCard({ paper, index, subjectName }: { paper: Paper; index: number;
     if (paper.pdfPath) {
       const pdfUrl = paper.pdfPath.startsWith("http")
         ? paper.pdfPath
-        : getApiUrl() + paper.pdfPath.replace(/^\//, '');
-      Linking.openURL(pdfUrl);
+        : getApiUrl() + paper.pdfPath.replace(/^\//, "");
+      router.push({ pathname: "/pdf-viewer", params: { url: encodeURIComponent(getViewerUrl(pdfUrl)) } });
       markView();
     } else {
       Alert.alert(
@@ -92,6 +96,8 @@ function PaperCard({ paper, index, subjectName }: { paper: Paper; index: number;
 
   const handleDownload = async () => {
     if (!paper.pdfPath || downloading) return;
+    const ok = await ensureProfileComplete(() => router.replace("/profile"));
+    if (!ok) return;
     setDownloading(true);
     try {
       const pdfUrl = paper.pdfPath.startsWith("http")
@@ -173,6 +179,17 @@ export default function SubjectScreen() {
   const { data: subject, isLoading } = useQuery<SubjectDetail>({
     queryKey: ["/api/subjects", id],
   });
+
+  const { data: videos = [] } = useQuery<Video[]>({
+    queryKey: ["/api/subjects/" + id + "/videos"],
+    enabled: !!id,
+  });
+
+  const { data: analytics } = useQuery<PyqAnalytics | null>({
+    queryKey: ["/api/subjects/" + id + "/analytics"],
+    enabled: !!id,
+  });
+  const [expandedUnitIndex, setExpandedUnitIndex] = useState<number | null>(0);
 
   const { data: branch } = useQuery<Branch>({
     queryKey: ["/api/branches", subject?.branchId],
@@ -273,6 +290,30 @@ export default function SubjectScreen() {
               Papers ({papers.length})
             </Text>
           </Pressable>
+          <Pressable
+            onPress={() => {
+              if (Platform.OS !== "web") Haptics.selectionAsync();
+              setActiveTab("videos");
+            }}
+            style={[styles.tab, activeTab === "videos" && styles.tabActive]}
+          >
+            <Feather name="video" size={16} color={activeTab === "videos" ? colors.primary : colors.textMuted} />
+            <Text style={[styles.tabText, activeTab === "videos" && styles.tabTextActive]}>
+              Videos ({videos.length})
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              if (Platform.OS !== "web") Haptics.selectionAsync();
+              setActiveTab("analyzer");
+            }}
+            style={[styles.tab, activeTab === "analyzer" && styles.tabActive]}
+          >
+            <Feather name="bar-chart-2" size={16} color={activeTab === "analyzer" ? colors.primary : colors.textMuted} />
+            <Text style={[styles.tabText, activeTab === "analyzer" && styles.tabTextActive]}>
+              Analyzer
+            </Text>
+          </Pressable>
         </View>
 
         {activeTab === "syllabus" ? (
@@ -289,7 +330,7 @@ export default function SubjectScreen() {
               </View>
             )}
           </View>
-        ) : (
+        ) : activeTab === "papers" ? (
           <View style={styles.contentList}>
             <View style={styles.filterRow}>
               {(["All", "Main", "Supply", "Back"] as const).map(type => (
@@ -324,6 +365,103 @@ export default function SubjectScreen() {
                 <MaterialCommunityIcons name="file-search-outline" size={40} color={colors.textMuted} />
                 <Text style={styles.emptyTitle}>No papers available</Text>
                 <Text style={styles.emptySubtext}>Try a different filter or check back soon</Text>
+              </View>
+            )}
+          </View>
+        ) : activeTab === "videos" ? (
+          <View style={styles.contentList}>
+            {videos.length > 0 ? (
+              videos.map((video, i) => (
+                <Animated.View key={video.id} entering={FadeInDown.delay(i * 60).duration(400)}>
+                  <Pressable
+                    onPress={() => Linking.openURL(video.url)}
+                    style={({ pressed }) => [
+                      styles.videoCard,
+                      { transform: [{ scale: pressed ? 0.98 : 1 }] },
+                    ]}
+                  >
+                    <View style={styles.videoIcon}>
+                      <Feather name="play-circle" size={20} color={colors.primary} />
+                    </View>
+                    <View style={styles.videoInfo}>
+                      <Text style={styles.videoTitle}>{video.title}</Text>
+                      <Text style={styles.videoUrl} numberOfLines={1}>{video.url}</Text>
+                    </View>
+                    <Feather name="external-link" size={18} color={colors.textMuted} />
+                  </Pressable>
+                </Animated.View>
+              ))
+            ) : (
+              <View style={styles.emptyPapers}>
+                <Feather name="video" size={40} color={colors.textMuted} />
+                <Text style={styles.emptyTitle}>No videos available</Text>
+                <Text style={styles.emptySubtext}>Video links will be added soon</Text>
+              </View>
+            )}
+          </View>
+        ) : (
+          <View style={styles.contentList}>
+            {analytics && (analytics.units || []).length > 0 ? (
+              <>
+                {analytics.units!.map((u, i) => {
+                  const expanded = expandedUnitIndex === i;
+                  return (
+                    <View key={`${u.unit}-${i}`} style={styles.analyticsCard}>
+                      <Pressable
+                        onPress={() => setExpandedUnitIndex(expanded ? null : i)}
+                        style={styles.unitHeaderRow}
+                      >
+                        <View>
+                          <Text style={styles.analyticsTitle}>{u.unit}</Text>
+                          <Text style={styles.unitWeightage}>
+                            {typeof u.percentage === "number" ? `${u.percentage}% weightage` : "Weightage not set"}
+                          </Text>
+                        </View>
+                        <Feather name={expanded ? "chevron-up" : "chevron-down"} size={18} color={colors.textMuted} />
+                      </Pressable>
+
+                      {expanded ? (
+                        <View style={styles.unitDetails}>
+                          <Text style={styles.sectionLabel}>Topics</Text>
+                          {(u.topics || []).length ? (
+                            u.topics!.map((t, idx) => (
+                              <Text key={`${t}-${idx}`} style={styles.analyticsBullet}>• {t}</Text>
+                            ))
+                          ) : (
+                            <Text style={styles.analyticsEmpty}>No topics for this unit</Text>
+                          )}
+
+                          <Text style={styles.sectionLabel}>Most Repeated Questions</Text>
+                          {(u.repeated || []).length ? (
+                            u.repeated!.map((q, idx) => (
+                              <Text key={`${q}-${idx}`} style={styles.analyticsBullet}>• {q}</Text>
+                            ))
+                          ) : (
+                            <Text style={styles.analyticsEmpty}>No repeated questions for this unit</Text>
+                          )}
+
+                          <Text style={styles.sectionLabel}>5-Year Trend</Text>
+                          {(u.trend || []).length ? (
+                            u.trend!.map((y, idx) => (
+                              <View key={`${y.year}-${idx}`} style={styles.analyticsRow}>
+                                <Text style={styles.analyticsLabel}>{y.year}</Text>
+                                <Text style={styles.analyticsValue}>{y.count} questions</Text>
+                              </View>
+                            ))
+                          ) : (
+                            <Text style={styles.analyticsEmpty}>No trend data for this unit</Text>
+                          )}
+                        </View>
+                      ) : null}
+                    </View>
+                  );
+                })}
+              </>
+            ) : (
+              <View style={styles.emptyPapers}>
+                <Feather name="bar-chart-2" size={40} color={colors.textMuted} />
+                <Text style={styles.emptyTitle}>No analysis available</Text>
+                <Text style={styles.emptySubtext}>Add analysis in admin panel</Text>
               </View>
             )}
           </View>
@@ -495,6 +633,33 @@ const baseStyles = {
     gap: 14,
     borderWidth: 1,
   },
+  videoCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 14,
+    padding: 16,
+    gap: 14,
+    borderWidth: 1,
+  },
+  videoIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  videoInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  videoTitle: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 15,
+  },
+  videoUrl: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+  },
   paperIcon: {
     width: 44,
     height: 44,
@@ -546,6 +711,57 @@ const baseStyles = {
     textAlign: "center",
     marginTop: 100,
   },
+  analyticsCard: {
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    gap: 10,
+  },
+  analyticsTitle: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 15,
+  },
+  analyticsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  unitHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  unitWeightage: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+  },
+  unitDetails: {
+    marginTop: 12,
+    gap: 8,
+  },
+  sectionLabel: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 13,
+    marginTop: 6,
+  },
+  analyticsLabel: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 13,
+  },
+  analyticsValue: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 13,
+  },
+  analyticsEmpty: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+  },
+  analyticsBullet: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    lineHeight: 18,
+  },
 };
 
 function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
@@ -574,10 +790,24 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
     topicDot: { ...baseStyles.topicDot, backgroundColor: colors.primary },
     topicText: { ...baseStyles.topicText, color: colors.textSecondary },
     paperCard: { ...baseStyles.paperCard, backgroundColor: colors.card, borderColor: colors.cardBorder },
+    videoCard: { ...baseStyles.videoCard, backgroundColor: colors.card, borderColor: colors.cardBorder },
+    videoIcon: { ...baseStyles.videoIcon, backgroundColor: colors.primary + "18" },
+    videoTitle: { ...baseStyles.videoTitle, color: colors.text },
+    videoUrl: { ...baseStyles.videoUrl, color: colors.textMuted },
     paperTitle: { ...baseStyles.paperTitle, color: colors.text },
     emptyTitle: { ...baseStyles.emptyTitle, color: colors.textSecondary },
     emptySubtext: { ...baseStyles.emptySubtext, color: colors.textMuted },
     errorText: { ...baseStyles.errorText, color: colors.danger },
+    analyticsCard: { ...baseStyles.analyticsCard, backgroundColor: colors.card, borderColor: colors.cardBorder },
+    analyticsTitle: { ...baseStyles.analyticsTitle, color: colors.text },
+    analyticsLabel: { ...baseStyles.analyticsLabel, color: colors.textSecondary },
+    analyticsValue: { ...baseStyles.analyticsValue, color: colors.primary },
+    analyticsEmpty: { ...baseStyles.analyticsEmpty, color: colors.textMuted },
+    analyticsBullet: { ...baseStyles.analyticsBullet, color: colors.textSecondary },
+    unitHeaderRow: { ...baseStyles.unitHeaderRow },
+    unitWeightage: { ...baseStyles.unitWeightage, color: colors.textMuted },
+    unitDetails: { ...baseStyles.unitDetails },
+    sectionLabel: { ...baseStyles.sectionLabel, color: colors.text },
   });
 }
 

@@ -106,7 +106,9 @@ export default function BranchScreen() {
   const filteredSubjects = useMemo(() => {
     const q = query.trim().toLowerCase();
     return allSubjects.filter(s => {
-      if (currentSem !== "all" && s.semester !== currentSem) return false;
+      const subjectSem =
+        typeof s.semester === "string" ? Number.parseInt(s.semester, 10) : s.semester;
+      if (currentSem !== "all" && subjectSem !== currentSem) return false;
       if (!q) return true;
       return s.name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q);
     });

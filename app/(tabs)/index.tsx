@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View, ScrollView, Pressable, Platform, ActivityIndicator, Linking } from "react-native";
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -9,7 +9,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useTheme } from "@/lib/theme";
 import type { Branch, Paper, Subject } from "@/lib/rgpv-data";
 import { getApiUrl } from "@/lib/query-client";
-import { useMemo } from "react";
+import { getViewerUrl } from "@/lib/pdf-viewer";
+import { ensureProfileComplete } from "@/lib/profile-guard";
+import { auth, db } from "@/lib/firebase-client";
+import { doc, getDoc } from "firebase/firestore";
 
 function BranchCard({ branch }: { branch: Branch }) {
   const { colors } = useTheme();
@@ -59,15 +62,17 @@ function RecentPaperCard({ paper, subject }: { paper: Paper; subject?: Subject }
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const isMain = paper.examType === "Main";
 
-  const handlePress = () => {
+  const handlePress = async () => {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
+    const ok = await ensureProfileComplete(() => router.replace("/profile"));
+    if (!ok) return;
     if (paper.pdfPath) {
       const pdfUrl = paper.pdfPath.startsWith("http")
         ? paper.pdfPath
         : getApiUrl() + paper.pdfPath.replace(/^\//, "");
-      Linking.openURL(pdfUrl);
+      router.push({ pathname: "/pdf-viewer", params: { url: encodeURIComponent(getViewerUrl(pdfUrl)) } });
       return;
     }
     if (subject) {
@@ -108,6 +113,34 @@ export default function HomeScreen() {
   const webTopInset = Platform.OS === "web" ? 67 : 0;
   const { colors, toggle, mode } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [profileName, setProfileName] = useState<string | null>(null);
+
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user) {
+      setProfileName(null);
+      return;
+    }
+    getDoc(doc(db, "profiles", user.uid))
+      .then((snap) => {
+        const data = snap.exists() ? (snap.data() as any) : {};
+        const fullName = (data?.name || user.displayName || "").trim();
+        const firstName = fullName ? fullName.split(/\s+/)[0] : "";
+        setProfileName(firstName || null);
+      })
+      .catch(() => {
+        const fullName = (user.displayName || "").trim();
+        const firstName = fullName ? fullName.split(/\s+/)[0] : "";
+        setProfileName(firstName || null);
+      });
+  }, []);
+
+  const greeting = (() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 18) return "Good afternoon";
+    return "Good evening";
+  })();
 
   const { data: branches = [], isLoading } = useQuery<Branch[]>({
     queryKey: ["/api/branches"],
@@ -169,6 +202,12 @@ export default function HomeScreen() {
           end={{ x: 1, y: 1 }}
         >
           <View style={styles.headerContent}>
+            {profileName ? (
+              <View style={styles.greetingBlock}>
+                <Text style={styles.greetingText}>Hey {profileName},</Text>
+                <Text style={styles.greetingSubtext}>{greeting}.</Text>
+              </View>
+            ) : null}
             <View style={styles.headerBadge}>
               <Ionicons name="school" size={16} color={colors.primary} />
               <Text style={styles.headerBadgeText}>RGPV</Text>
@@ -261,6 +300,21 @@ export default function HomeScreen() {
             ))}
           </View>
         )}
+
+        <View style={styles.footer}>
+          <Text style={styles.footerTitle}>Legal</Text>
+          <View style={styles.footerLinks}>
+            <Pressable onPress={() => router.push("/legal/privacy")}>
+              <Text style={styles.footerLink}>Privacy Policy</Text>
+            </Pressable>
+            <Pressable onPress={() => router.push("/legal/terms")}>
+              <Text style={styles.footerLink}>Terms & Conditions</Text>
+            </Pressable>
+            <Pressable onPress={() => router.push("/legal/copyright")}>
+              <Text style={styles.footerLink}>Copyright Notice</Text>
+            </Pressable>
+          </View>
+        </View>
       </ScrollView>
     </View>
   );
@@ -297,6 +351,19 @@ const baseStyles = {
     fontFamily: "Inter_700Bold",
     fontSize: 13,
     letterSpacing: 1,
+  },
+  greetingBlock: {
+    marginBottom: 10,
+  },
+  greetingText: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 22,
+    lineHeight: 28,
+  },
+  greetingSubtext: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 14,
+    marginTop: 2,
   },
   headerTitleRow: {
     flexDirection: "row",
@@ -443,6 +510,23 @@ const baseStyles = {
     fontSize: 12,
     lineHeight: 16,
   },
+  footer: {
+    marginTop: 24,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    gap: 10,
+  },
+  footerTitle: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 14,
+  },
+  footerLinks: {
+    gap: 6,
+  },
+  footerLink: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 13,
+  },
 };
 
 function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
@@ -451,6 +535,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
     container: { ...baseStyles.container, backgroundColor: colors.background },
     headerBadge: { ...baseStyles.headerBadge, backgroundColor: colors.primary + "20" },
     headerBadgeText: { ...baseStyles.headerBadgeText, color: colors.primary },
+    greetingText: { ...baseStyles.greetingText, color: colors.text },
+    greetingBlock: { ...baseStyles.greetingBlock },
+    greetingSubtext: { ...baseStyles.greetingSubtext, color: colors.textSecondary },
     themeToggle: { ...baseStyles.themeToggle, backgroundColor: colors.card, borderColor: colors.cardBorder },
     headerTitle: { ...baseStyles.headerTitle, color: colors.text },
     headerSubtitle: { ...baseStyles.headerSubtitle, color: colors.textSecondary },
@@ -469,6 +556,10 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
     branchCard: { ...baseStyles.branchCard, backgroundColor: colors.card, borderColor: colors.cardBorder },
     branchShortName: { ...baseStyles.branchShortName, color: colors.text },
     branchFullName: { ...baseStyles.branchFullName, color: colors.textSecondary },
+    footer: { ...baseStyles.footer, borderTopColor: colors.cardBorder },
+    footerTitle: { ...baseStyles.footerTitle, color: colors.text },
+    footerLinks: { ...baseStyles.footerLinks },
+    footerLink: { ...baseStyles.footerLink, color: colors.primary },
 
   });
 }

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "100975426315",
+    "project_id": "rgpv-01",
+    "storage_bucket": "rgpv-01.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:100975426315:android:1371cbe3c0eee1cd6d400e",
+        "android_client_info": {
+          "package_name": "com.myapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDlRPo8NqRMhuwk55g8rS0aY2d2m6ZYRBA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

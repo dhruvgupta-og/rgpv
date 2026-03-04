@@ -40,6 +40,75 @@ async function uploadPdfToFirebase(file: Express.Multer.File) {
   return url;
 }
 
+function normalizePdfLink(raw?: string) {
+  if (!raw) return raw;
+  const url = raw.trim();
+  if (!url) return url;
+  if (!url.includes("drive.google.com")) return url;
+
+  const fileIdMatch = url.match(/\/file\/d\/([^/]+)/);
+  if (fileIdMatch?.[1]) {
+    return `https://drive.google.com/uc?export=download&id=${fileIdMatch[1]}`;
+  }
+  const idMatch = url.match(/[?&]id=([^&]+)/);
+  if (idMatch?.[1]) {
+    return `https://drive.google.com/uc?export=download&id=${idMatch[1]}`;
+  }
+  return url;
+}
+
+function parseTopics(raw?: string) {
+  if (!raw) return [];
+  return raw
+    .split(/\r?\n|\||;/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
+function normalizeBranchId(raw?: string) {
+  return (raw || "").trim().toLowerCase();
+}
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+}
+
+function normalizeSubjectId(rawId: string, branchId: string, semester: number, code: string, name: string) {
+  const trimmed = (rawId || "").trim().toLowerCase();
+  if (trimmed && !/^\d+$/.test(trimmed)) return trimmed;
+  const base = slugify(code || name || "subject");
+  return `${branchId}-${semester}-${base}`.replace(/--+/g, "-");
+}
+
+function buildSubjectLookup(subjects: any[]) {
+  const byId = new Map<string, any>();
+  const byCode = new Map<string, any>();
+  const byName = new Map<string, any>();
+  subjects.forEach((s) => {
+    const id = String(s.id || "").trim();
+    if (id) byId.set(id, s);
+    const code = String(s.code || "").trim().toLowerCase();
+    if (code) byCode.set(code, s);
+    const name = String(s.name || "").trim().toLowerCase();
+    if (name) byName.set(name, s);
+  });
+  return { byId, byCode, byName };
+}
+
+function resolveSubjectId(raw: any, lookup: ReturnType<typeof buildSubjectLookup>) {
+  const rawStr = String(raw || "").trim();
+  if (!rawStr) return "";
+  if (lookup.byId.has(rawStr)) return rawStr;
+  const lower = rawStr.toLowerCase();
+  if (lookup.byCode.has(lower)) return lookup.byCode.get(lower).id;
+  if (lookup.byName.has(lower)) return lookup.byName.get(lower).id;
+  return "";
+}
+
 const csvUpload = multer({
   storage: multer.memoryStorage(),
   fileFilter: (_req, file, cb) => {
@@ -137,6 +206,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const limit = Number(req.query.limit || 50);
       const data = await storage.getNotifications(Math.min(limit, 200));
       res.json(data);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.delete("/api/notifications/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      await storage.deleteNotification(req.params.id);
+      await storage.createAuditLog({
+        userId: req.user?.id,
+        action: "delete",
+        entity: "notification",
+        entityId: req.params.id,
+        ip: req.ip,
+      });
+      res.json({ ok: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -320,7 +405,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!subject) return res.status(404).json({ error: "Not found" });
       const syllabus = await storage.getSyllabusUnits(req.params.id);
       const papers = await storage.getPapers(req.params.id);
-      res.json({ ...subject, syllabus, papers });
+      const videos = await storage.getVideos(req.params.id);
+      res.json({ ...subject, syllabus, papers, videos });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -448,6 +534,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/subjects/:subjectId/videos", async (req: Request, res: Response) => {
+    try {
+      const data = await storage.getVideos(req.params.subjectId);
+      res.json(data);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/subjects/:subjectId/analytics", async (req: Request, res: Response) => {
+    try {
+      const data = await storage.getAnalytics(req.params.subjectId);
+      res.json(data || null);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.get("/api/papers", async (req: Request, res: Response) => {
     try {
       if (req.query.sort === "views") {
@@ -463,7 +567,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/papers", requireAdmin, upload.single("pdf"), async (req: Request, res: Response) => {
     try {
-      const pdfPath = req.file ? await uploadPdfToFirebase(req.file) : null;
+      const pdfLink = normalizePdfLink(req.body.pdfUrl);
+      const pdfPath = req.file ? await uploadPdfToFirebase(req.file) : (pdfLink || null);
       const paper = await storage.createPaper({
         subjectId: req.body.subjectId,
         year: req.body.year,
@@ -494,6 +599,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (req.body.subjectId) updateData.subjectId = req.body.subjectId;
       if (req.file) {
         updateData.pdfPath = await uploadPdfToFirebase(req.file);
+      } else if (req.body.pdfUrl) {
+        updateData.pdfPath = normalizePdfLink(req.body.pdfUrl);
       }
       const paper = await storage.updatePaper(Number(req.params.id), updateData);
       if (!paper) return res.status(404).json({ error: "Not found" });
@@ -542,6 +649,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ---- VIDEOS ----
+  app.post("/api/videos", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const video = await storage.createVideo(req.body);
+      await storage.createAuditLog({
+        userId: (req as any).adminUser?.id,
+        action: "create",
+        entity: "video",
+        entityId: String(video.id),
+        details: video,
+        ip: req.ip,
+      });
+      res.status(201).json(video);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.put("/api/videos/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const video = await storage.updateVideo(Number(req.params.id), req.body);
+      if (!video) return res.status(404).json({ error: "Not found" });
+      await storage.createAuditLog({
+        userId: (req as any).adminUser?.id,
+        action: "update",
+        entity: "video",
+        entityId: req.params.id,
+        details: req.body,
+        ip: req.ip,
+      });
+      res.json(video);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.delete("/api/videos/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      await storage.deleteVideo(Number(req.params.id));
+      await storage.createAuditLog({
+        userId: (req as any).adminUser?.id,
+        action: "delete",
+        entity: "video",
+        entityId: req.params.id,
+        ip: req.ip,
+      });
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ---- PYQ ANALYTICS ----
+  app.post("/api/analytics/:subjectId", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const analytics = await storage.upsertAnalytics(req.params.subjectId, req.body);
+      await storage.createAuditLog({
+        userId: (req as any).adminUser?.id,
+        action: "update",
+        entity: "pyq_analytics",
+        entityId: req.params.subjectId,
+        details: req.body,
+        ip: req.ip,
+      });
+      res.json(analytics);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // ---- SEED DATA ----
   app.post("/api/seed", requireAdmin, async (_req: Request, res: Response) => {
     try {
@@ -578,21 +755,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
         branchId: header.indexOf("branchid"),
         semester: header.indexOf("semester"),
       };
+      const unitTitleIdx: Record<number, number> = {};
+      const unitTopicsIdx: Record<number, number> = {};
+      for (let i = 1; i <= 8; i++) {
+        unitTitleIdx[i] = header.indexOf(`unit${i}_title`);
+        unitTopicsIdx[i] = header.indexOf(`unit${i}_topics`);
+      }
       const results = { created: 0, skipped: 0, errors: 0 };
       for (const row of rows.slice(1)) {
         try {
+          const name = (row[idx.name] || "").trim();
+          const code = (row[idx.code] || "").trim();
+          const branchId = normalizeBranchId(row[idx.branchId]);
+          const semester = Number(row[idx.semester]);
+          const id = normalizeSubjectId(row[idx.id], branchId, semester, code, name);
           const data = {
-            id: row[idx.id],
-            name: row[idx.name],
-            code: row[idx.code],
-            branchId: row[idx.branchId],
-            semester: Number(row[idx.semester]),
+            id,
+            name,
+            code,
+            branchId,
+            semester,
           };
           if (!data.id || !data.name || !data.code || !data.branchId || !data.semester) {
             results.skipped++;
             continue;
           }
           await storage.createSubject(data);
+          for (let i = 1; i <= 8; i++) {
+            const titleIdx = unitTitleIdx[i];
+            const topicsIdx = unitTopicsIdx[i];
+            if (titleIdx < 0) continue;
+            const title = row[titleIdx];
+            if (!title) continue;
+            const topics = topicsIdx >= 0 ? parseTopics(row[topicsIdx]) : [];
+            await storage.createSyllabusUnit({
+              subjectId: data.id,
+              unitNumber: i,
+              title,
+              topics,
+            });
+          }
           results.created++;
         } catch {
           results.errors++;
@@ -621,20 +823,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const header = rows[0].map(h => h.toLowerCase());
       const idx = {
         subjectId: header.indexOf("subjectid"),
+        subjectCode: header.indexOf("subjectcode"),
+        subjectName: header.indexOf("subjectname"),
         year: header.indexOf("year"),
         month: header.indexOf("month"),
         examType: header.indexOf("examtype"),
         pdfPath: header.indexOf("pdfpath"),
       };
+      const subjects = await storage.getAllSubjects();
+      const lookup = buildSubjectLookup(subjects as any[]);
       const results = { created: 0, skipped: 0, errors: 0 };
       for (const row of rows.slice(1)) {
         try {
+          const rawPath = idx.pdfPath >= 0 ? row[idx.pdfPath] : undefined;
           const data = {
-            subjectId: row[idx.subjectId],
+            subjectId: resolveSubjectId(
+              idx.subjectId >= 0 ? row[idx.subjectId] : (idx.subjectCode >= 0 ? row[idx.subjectCode] : row[idx.subjectName]),
+              lookup
+            ),
             year: row[idx.year],
             month: row[idx.month],
             examType: row[idx.examType] || "Main",
-            pdfPath: idx.pdfPath >= 0 ? row[idx.pdfPath] : undefined,
+            pdfPath: rawPath ? normalizePdfLink(rawPath) : undefined,
           };
           if (!data.subjectId || !data.year || !data.month) {
             results.skipped++;
@@ -655,6 +865,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ip: req.ip,
       });
       res.json(results);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/admin/papers/bulk", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const items = Array.isArray(req.body?.items) ? req.body.items : [];
+      const results = { created: 0, skipped: 0, errors: 0 };
+      const subjects = await storage.getAllSubjects();
+      const lookup = buildSubjectLookup(subjects as any[]);
+      for (const item of items) {
+        try {
+          const subjectId = resolveSubjectId(item.subjectId || item.subjectCode || item.subjectName, lookup);
+          const year = String(item.year || "").trim();
+          const month = String(item.month || "").trim();
+          const examType = String(item.examType || "Main").trim() || "Main";
+          const pdfPath = normalizePdfLink(String(item.pdfPath || "").trim());
+          if (!subjectId || !year || !month || !pdfPath) {
+            results.skipped++;
+            continue;
+          }
+          await storage.createPaper({ subjectId, year, month, examType, pdfPath });
+          results.created++;
+        } catch {
+          results.errors++;
+        }
+      }
+      await storage.createAuditLog({
+        userId: (req as any).adminUser?.id,
+        action: "import",
+        entity: "papers_bulk",
+        entityId: "manual",
+        details: results,
+        ip: req.ip,
+      });
+      res.json(results);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/admin/papers/reassign", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const fromSubjectId = String(req.body?.fromSubjectId || "").trim();
+      const toSubjectId = String(req.body?.toSubjectId || "").trim();
+      if (!fromSubjectId || !toSubjectId) {
+        return res.status(400).json({ error: "fromSubjectId and toSubjectId are required" });
+      }
+      const updated = await storage.reassignPapers(fromSubjectId, toSubjectId);
+      await storage.createAuditLog({
+        userId: (req as any).adminUser?.id,
+        action: "update",
+        entity: "papers_reassign",
+        entityId: `${fromSubjectId}=>${toSubjectId}`,
+        ip: req.ip,
+      });
+      res.json({ updated });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

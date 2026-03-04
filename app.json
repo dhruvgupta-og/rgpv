@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "RGPV Papers",
+    "name": "RGPV Resources",
     "slug": "rgpv-pyq",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -19,6 +19,7 @@
     },
     "android": {
       "package": "com.myapp",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#0A1628",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

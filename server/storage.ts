@@ -48,13 +48,13 @@ export const storage = {
 
   // ---- SUBJECTS ----
   async getAllSubjects() {
-    const snap = await db.collection("subjects").orderBy("semester").orderBy("name").get();
-    return snap.docs.map((d) => d.data());
+    const snap = await db.collection("subjects").get();
+    return snap.docs.map((d) => d.data()).sort((a, b) => String(a.code).localeCompare(String(b.code)));
   },
 
   async getSubjectsByBranch(branchId: string) {
-    const snap = await db.collection("subjects").where("branchId", "==", branchId).orderBy("semester").orderBy("name").get();
-    return snap.docs.map((d) => d.data());
+    const snap = await db.collection("subjects").where("branchId", "==", branchId).get();
+    return snap.docs.map((d) => d.data()).sort((a, b) => String(a.code).localeCompare(String(b.code)));
   },
 
   async getSubjectsByBranchAndSemester(branchId: string, semester: number) {
@@ -62,9 +62,8 @@ export const storage = {
       .collection("subjects")
       .where("branchId", "==", branchId)
       .where("semester", "==", semester)
-      .orderBy("name")
       .get();
-    return snap.docs.map((d) => d.data());
+    return snap.docs.map((d) => d.data()).sort((a, b) => String(a.code).localeCompare(String(b.code)));
   },
 
   async getSubject(id: string) {
@@ -91,9 +90,11 @@ export const storage = {
     await db.collection("subjects").doc(id).delete();
     const units = await db.collection("syllabusUnits").where("subjectId", "==", id).get();
     const papers = await db.collection("papers").where("subjectId", "==", id).get();
+    const videos = await db.collection("videos").where("subjectId", "==", id).get();
     const batch = db.batch();
     units.docs.forEach((d) => batch.delete(d.ref));
     papers.docs.forEach((d) => batch.delete(d.ref));
+    videos.docs.forEach((d) => batch.delete(d.ref));
     await batch.commit();
   },
 
@@ -169,6 +170,46 @@ export const storage = {
   async getMostViewedPapers(limit: number) {
     const snap = await db.collection("papers").orderBy("views", "desc").limit(limit).get();
     return snap.docs.map((d) => d.data());
+  },
+
+  async reassignPapers(fromSubjectId: string, toSubjectId: string) {
+    const snap = await db.collection("papers").where("subjectId", "==", fromSubjectId).get();
+    if (snap.empty) return 0;
+    const docs = snap.docs;
+    const batches = [];
+    for (let i = 0; i < docs.length; i += 450) {
+      const batch = db.batch();
+      docs.slice(i, i + 450).forEach((d) => batch.update(d.ref, { subjectId: toSubjectId }));
+      batches.push(batch.commit());
+    }
+    await Promise.all(batches);
+    return docs.length;
+  },
+
+  // ---- VIDEOS ----
+  async getVideos(subjectId: string) {
+    const snap = await db.collection("videos").where("subjectId", "==", subjectId).orderBy("createdAt", "desc").get();
+    return snap.docs.map((d) => d.data());
+  },
+
+  async createVideo(data: any) {
+    const id = makeId();
+    const payload = { ...data, id, createdAt: now() };
+    await db.collection("videos").doc(String(id)).set(payload);
+    return payload;
+  },
+
+  async updateVideo(id: number, data: any) {
+    const ref = db.collection("videos").doc(String(id));
+    const snap = await ref.get();
+    if (!snap.exists) return undefined;
+    await ref.set({ ...data, id }, { merge: true });
+    const updated = await ref.get();
+    return updated.data();
+  },
+
+  async deleteVideo(id: number) {
+    await db.collection("videos").doc(String(id)).delete();
   },
 
   // ---- USERS / SESSIONS ----
@@ -273,6 +314,30 @@ export const storage = {
   async getNotifications(limit: number) {
     const snap = await db.collection("notifications").orderBy("createdAt", "desc").limit(limit).get();
     return snap.docs.map((d) => d.data());
+  },
+
+  async deleteNotification(id: string) {
+    await db.collection("notifications").doc(id).delete();
+  },
+
+  // ---- PYQ ANALYTICS ----
+  async getAnalytics(subjectId: string) {
+    const doc = await db.collection("pyqAnalytics").doc(subjectId).get();
+    return toDoc(doc);
+  },
+
+  async upsertAnalytics(subjectId: string, data: any) {
+    const ref = db.collection("pyqAnalytics").doc(subjectId);
+    const snap = await ref.get();
+    const payload = {
+      ...data,
+      subjectId,
+      updatedAt: now(),
+      createdAt: snap.exists ? snap.data()?.createdAt : now(),
+    };
+    await ref.set(payload, { merge: true });
+    const updated = await ref.get();
+    return updated.data();
   },
 
   // ---- PROFILES ----
