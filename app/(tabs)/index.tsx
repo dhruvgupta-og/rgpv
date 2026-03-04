@@ -12,7 +12,6 @@ import { getApiUrl } from "@/lib/query-client";
 import { getViewerUrl } from "@/lib/pdf-viewer";
 import { ensureProfileComplete } from "@/lib/profile-guard";
 import { auth, db } from "@/lib/firebase-client";
-import { doc, getDoc } from "firebase/firestore";
 
 function BranchCard({ branch }: { branch: Branch }) {
   const { colors } = useTheme();
@@ -121,9 +120,11 @@ export default function HomeScreen() {
       setProfileName(null);
       return;
     }
-    getDoc(doc(db, "profiles", user.uid))
+    db.collection("profiles")
+      .doc(user.uid)
+      .get()
       .then((snap) => {
-        const data = snap.exists() ? (snap.data() as any) : {};
+        const data = snap.exists ? (snap.data() as any) : {};
         const fullName = (data?.name || user.displayName || "").trim();
         const firstName = fullName ? fullName.split(/\s+/)[0] : "";
         setProfileName(firstName || null);

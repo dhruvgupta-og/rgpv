@@ -2,13 +2,13 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/lib/theme";
-import { auth, db } from "@/lib/firebase-client";
-import { GoogleAuthProvider, onAuthStateChanged, signInWithCredential, signInWithPopup, signOut, User } from "firebase/auth";
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { auth, db, firebase } from "@/lib/firebase-client";
 import { useQuery } from "@tanstack/react-query";
 import type { Branch } from "@/lib/rgpv-data";
 import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
+import * as AuthSession from "expo-auth-session";
+import Constants from "expo-constants";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -28,7 +28,7 @@ export default function ProfileScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<firebase.User | null>(null);
   const [name, setName] = useState("");
   const [branchId, setBranchId] = useState("");
   const [year, setYear] = useState("");
@@ -45,14 +45,25 @@ export default function ProfileScreen() {
 
   const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || undefined;
   const googleAndroidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || undefined;
+  const isExpoGo = Constants.appOwnership === "expo" || Constants.executionEnvironment === "storeClient";
+  const useProxy = isExpoGo;
+  const redirectUri = AuthSession.makeRedirectUri({
+    useProxy,
+    scheme: "myapp",
+    projectNameForProxy: "@dhruvhereyo0s-organization/rgpv-pyq",
+  });
+  const promptOptions = isExpoGo ? { useProxy: true, projectNameForProxy: "@dhruvhereyo0s-organization/rgpv-pyq" } : undefined;
 
   const [request, response, promptAsync] = Google.useAuthRequest({
     webClientId: googleWebClientId,
+    expoClientId: googleWebClientId,
     androidClientId: googleAndroidClientId,
+    redirectUri,
+    useProxy,
   });
 
   useEffect(() => {
-    return onAuthStateChanged(auth, (u) => {
+    return auth.onAuthStateChanged((u) => {
       setUser(u);
       if (u) {
         loadProfile(u).catch(() => {});
@@ -65,18 +76,18 @@ export default function ProfileScreen() {
       const idToken = response.authentication?.idToken;
       const accessToken = response.authentication?.accessToken;
       if (!idToken && !accessToken) return;
-      const credential = GoogleAuthProvider.credential(idToken, accessToken);
-      signInWithCredential(auth, credential).catch((e) => {
+      const credential = firebase.auth.GoogleAuthProvider.credential(idToken, accessToken);
+      auth.signInWithCredential(credential).catch((e) => {
         Alert.alert("Google login failed", e.message);
       });
     }
   }, [response]);
 
-  const loadProfile = async (u: User) => {
+  const loadProfile = async (u: firebase.User) => {
     setLoadingProfile(true);
-    const ref = doc(db, "profiles", u.uid);
-    const snap = await getDoc(ref);
-    if (snap.exists()) {
+    const ref = db.collection("profiles").doc(u.uid);
+    const snap = await ref.get();
+    if (snap.exists) {
       const data = snap.data() as any;
       setName(data.name || u.displayName || "");
       setBranchId(data.branchId || "");
@@ -92,7 +103,7 @@ export default function ProfileScreen() {
     if (Platform.OS === "web") {
       try {
         setAuthStatus("Opening Google...");
-        await signInWithPopup(auth, new GoogleAuthProvider());
+        await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
         setAuthStatus("");
       } catch (e: any) {
         setAuthStatus("");
@@ -105,7 +116,7 @@ export default function ProfileScreen() {
       Alert.alert("Google login not configured", "Set EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID in .env and eas.json.");
       return;
     }
-    await promptAsync();
+    await promptAsync(promptOptions);
   };
 
   const handleSave = async () => {
@@ -116,9 +127,8 @@ export default function ProfileScreen() {
     }
     setSaving(true);
     try {
-      const ref = doc(db, "profiles", user.uid);
-      await setDoc(
-        ref,
+      const ref = db.collection("profiles").doc(user.uid);
+      await ref.set(
         {
           id: user.uid,
           deviceId: user.uid,
@@ -127,8 +137,8 @@ export default function ProfileScreen() {
           branchId,
           year,
           collegeName,
-          updatedAt: serverTimestamp(),
-          createdAt: serverTimestamp(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true },
       );
@@ -143,7 +153,7 @@ export default function ProfileScreen() {
   };
 
   const handleLogout = async () => {
-    await signOut(auth);
+    await auth.signOut();
     setUser(null);
   };
 

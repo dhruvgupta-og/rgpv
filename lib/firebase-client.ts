@@ -1,6 +1,6 @@
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, browserLocalPersistence } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import firebase from "firebase/compat/app";
+import "firebase/compat/auth";
+import "firebase/compat/firestore";
 import { Platform } from "react-native";
 
 const firebaseConfig = {
@@ -13,12 +13,15 @@ const firebaseConfig = {
   measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-export const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
-
-export const auth = getAuth(firebaseApp);
-
-if (Platform.OS === "web") {
-  auth.setPersistence(browserLocalPersistence).catch(() => {});
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
 }
 
-export const db = getFirestore(firebaseApp);
+export { firebase };
+export const firebaseApp = firebase.app();
+export const auth = firebase.auth();
+export const db = firebase.firestore();
+
+if (Platform.OS === "web") {
+  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
+}

@@ -14,19 +14,13 @@ import { BookmarksProvider } from "@/lib/bookmarks";
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from "@expo-google-fonts/inter";
 import { StatusBar } from "expo-status-bar";
 import { ThemeProvider, useTheme } from "@/lib/theme";
-import { auth, db } from "@/lib/firebase-client";
-import {
-  GoogleAuthProvider,
-  onAuthStateChanged,
-  signInWithCredential,
-  signInWithPopup,
-  User,
-} from "firebase/auth";
+import { auth, db, firebase } from "@/lib/firebase-client";
 import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
 import { LinearGradient } from "expo-linear-gradient";
-import { doc, onSnapshot } from "firebase/firestore";
 import * as ScreenCapture from "expo-screen-capture";
+import * as AuthSession from "expo-auth-session";
+import Constants from "expo-constants";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -60,20 +54,31 @@ function AuthGate() {
   const router = useRouter();
   const pathname = usePathname();
   const hasRedirectedRef = React.useRef(false);
-  const [user, setUser] = React.useState<User | null>(null);
+  const [user, setUser] = React.useState<firebase.User | null>(null);
   const [authReady, setAuthReady] = React.useState(false);
   const [profileReady, setProfileReady] = React.useState(false);
   const [profileComplete, setProfileComplete] = React.useState(true);
   const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || undefined;
   const googleAndroidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || undefined;
+  const isExpoGo = Constants.appOwnership === "expo" || Constants.executionEnvironment === "storeClient";
+  const useProxy = isExpoGo;
+  const redirectUri = AuthSession.makeRedirectUri({
+    useProxy,
+    scheme: "myapp",
+    projectNameForProxy: "@dhruvhereyo0s-organization/rgpv-pyq",
+  });
+  const promptOptions = isExpoGo ? { useProxy: true, projectNameForProxy: "@dhruvhereyo0s-organization/rgpv-pyq" } : undefined;
 
   const [request, response, promptAsync] = Google.useAuthRequest({
     webClientId: googleWebClientId,
+    expoClientId: googleWebClientId,
     androidClientId: googleAndroidClientId,
+    redirectUri,
+    useProxy,
   });
 
   React.useEffect(() => {
-    return onAuthStateChanged(auth, (u) => {
+    return auth.onAuthStateChanged((u) => {
       setUser(u);
       setAuthReady(true);
       if (!u) {
@@ -89,11 +94,10 @@ function AuthGate() {
       return;
     }
     setProfileReady(false);
-    const ref = doc(db, "profiles", user.uid);
-    const unsubscribe = onSnapshot(
-      ref,
+    const ref = db.collection("profiles").doc(user.uid);
+    const unsubscribe = ref.onSnapshot(
       (snap) => {
-        const data = snap.exists() ? (snap.data() as any) : {};
+        const data = snap.exists ? (snap.data() as any) : {};
         const isComplete = !!data?.name && !!data?.branchId && !!data?.year && !!data?.collegeName;
         setProfileComplete(isComplete);
         setProfileReady(true);
@@ -114,8 +118,8 @@ function AuthGate() {
       const idToken = response.authentication?.idToken;
       const accessToken = response.authentication?.accessToken;
       if (!idToken && !accessToken) return;
-      const credential = GoogleAuthProvider.credential(idToken, accessToken);
-      signInWithCredential(auth, credential).catch(() => {});
+      const credential = firebase.auth.GoogleAuthProvider.credential(idToken, accessToken);
+      auth.signInWithCredential(credential).catch(() => {});
     }
   }, [response]);
 
@@ -257,11 +261,11 @@ function AuthGate() {
           <Pressable
             onPress={async () => {
               if (Platform.OS === "web") {
-                await signInWithPopup(auth, new GoogleAuthProvider());
+                await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
                 return;
               }
               if (!googleAndroidClientId) return;
-              await promptAsync();
+              await promptAsync(promptOptions);
             }}
             style={{
               borderRadius: 16,
