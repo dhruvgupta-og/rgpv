@@ -47,11 +47,14 @@ export default function ProfileScreen() {
   const googleAndroidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || undefined;
   const isExpoGo = Constants.appOwnership === "expo" || Constants.executionEnvironment === "storeClient";
   const useProxy = isExpoGo;
-  const redirectUri = AuthSession.makeRedirectUri({
-    useProxy,
-    scheme: "myapp",
-    projectNameForProxy: "@dhruvhereyo0s-organization/rgpv-pyq",
-  });
+  const androidRedirectScheme = googleAndroidClientId
+    ? `com.googleusercontent.apps.${googleAndroidClientId.split(".apps.googleusercontent.com")[0]}`
+    : "com.googleusercontent.apps";
+  const redirectUri = AuthSession.makeRedirectUri(
+    isExpoGo
+      ? { useProxy: true, projectNameForProxy: "@dhruvhereyo0s-organization/rgpv-pyq" }
+      : { scheme: androidRedirectScheme },
+  );
   const promptOptions = isExpoGo ? { useProxy: true, projectNameForProxy: "@dhruvhereyo0s-organization/rgpv-pyq" } : undefined;
 
   const [request, response, promptAsync] = Google.useAuthRequest({
@@ -112,7 +115,7 @@ export default function ProfileScreen() {
       }
       return;
     }
-    if (!googleAndroidClientId) {
+    if (!isExpoGo && !googleAndroidClientId) {
       Alert.alert("Google login not configured", "Set EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID in .env and eas.json.");
       return;
     }

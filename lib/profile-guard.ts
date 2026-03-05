@@ -1,12 +1,10 @@
-import { Alert } from "react-native";
 import { auth, db } from "@/lib/firebase-client";
 
 export async function ensureProfileComplete(onIncomplete?: () => void) {
   const user = auth.currentUser;
   if (!user) {
-    Alert.alert("Login required", "Please sign in to continue.");
     onIncomplete?.();
-    return false;
+    return true;
   }
   const snap = await db.collection("profiles").doc(user.uid).get();
   const data = snap.exists ? (snap.data() as any) : {};
