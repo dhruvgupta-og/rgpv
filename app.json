@@ -49,9 +49,6 @@
     "extra": {
       "router": {
         "origin": "https://replit.com/"
-      },
-      "eas": {
-        "projectId": "0c3e4b75-fd1f-4bc9-93e7-170da7eeb1c5"
       }
     },
     "owner": "dhruvhereyo0s-organization"
