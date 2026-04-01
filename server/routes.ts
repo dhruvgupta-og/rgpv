@@ -263,6 +263,278 @@ function normalizeBranchId(raw?: string) {
   return (raw || "").trim().toLowerCase();
 }
 
+const PYQ_ANALYZER_MODEL = process.env.OPENAI_PYQ_MODEL || "gpt-4o-mini";
+const analyticsGenerationLocks = new Map<string, Promise<any>>();
+
+type AnalyticsGenerationResult = {
+  analytics: any | null;
+  status:
+    | "ready"
+    | "missing_api_key"
+    | "subject_not_found"
+    | "missing_syllabus"
+    | "missing_papers"
+    | "pdf_fetch_failed"
+    | "generation_failed"
+    | "not_generated";
+  reason?: string;
+};
+
+function getRequestBaseUrl(req: Request) {
+  const protocol = req.header("x-forwarded-proto") || req.protocol || "http";
+  const host = req.header("x-forwarded-host") || req.get("host");
+  return `${protocol}://${host}`;
+}
+
+function resolvePaperUrl(req: Request, pdfPath?: string | null) {
+  if (!pdfPath) return "";
+  if (/^https?:\/\//i.test(pdfPath)) {
+    return pdfPath;
+  }
+  return new URL(pdfPath.replace(/^\//, ""), getRequestBaseUrl(req) + "/").toString();
+}
+
+function buildSyllabusText(units: any[]) {
+  return units
+    .sort((a, b) => Number(a.unitNumber || 0) - Number(b.unitNumber || 0))
+    .map((unit) => {
+      const topics = Array.isArray(unit.topics) ? unit.topics.map((topic: string) => `- ${topic}`).join("\n") : "";
+      return `Unit ${unit.unitNumber}: ${unit.title}\n${topics}`.trim();
+    })
+    .join("\n\n");
+}
+
+async function fetchPdfInput(req: Request, pdfPath: string, fallbackName: string) {
+  const url = resolvePaperUrl(req, pdfPath);
+  if (!url) return null;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch PDF: ${response.status}`);
+  }
+  const buffer = Buffer.from(await response.arrayBuffer());
+  return {
+    filename: fallbackName,
+    file_data: `data:application/pdf;base64,${buffer.toString("base64")}`,
+  };
+}
+
+async function generateAnalyticsWithOpenAI(req: Request, subjectId: string) {
+  if (!process.env.OPENAI_API_KEY) {
+    return {
+      analytics: null,
+      status: "missing_api_key",
+      reason: "OPENAI_API_KEY is not configured on the server.",
+    } satisfies AnalyticsGenerationResult;
+  }
+
+  const subject = await storage.getSubject(subjectId);
+  if (!subject) {
+    return {
+      analytics: null,
+      status: "subject_not_found",
+      reason: "Subject not found.",
+    } satisfies AnalyticsGenerationResult;
+  }
+
+  const syllabus = await storage.getSyllabusUnits(subjectId);
+  const papers = await storage.getPapers(subjectId);
+  const pdfPapers = papers.filter((paper: any) => !!paper.pdfPath).slice(-4).reverse();
+
+  if (!syllabus.length) {
+    return {
+      analytics: null,
+      status: "missing_syllabus",
+      reason: "Syllabus is required before analyzer can be generated.",
+    } satisfies AnalyticsGenerationResult;
+  }
+
+  if (!pdfPapers.length) {
+    return {
+      analytics: null,
+      status: "missing_papers",
+      reason: "At least one uploaded PYQ PDF is required before analyzer can be generated.",
+    } satisfies AnalyticsGenerationResult;
+  }
+
+  const syllabusText = buildSyllabusText(syllabus as any[]);
+  let pdfInputs: Array<{ filename: string; file_data: string }> = [];
+  try {
+    pdfInputs = (
+      await Promise.all(
+        pdfPapers.map((paper: any, index: number) =>
+          fetchPdfInput(
+            req,
+            paper.pdfPath,
+            `${subject.code || subjectId}-${paper.month || "paper"}-${paper.year || index + 1}.pdf`,
+          ),
+        ),
+      )
+    ).filter(Boolean) as Array<{ filename: string; file_data: string }>;
+  } catch (error: any) {
+    return {
+      analytics: null,
+      status: "pdf_fetch_failed",
+      reason: error?.message || "Uploaded PDFs could not be fetched for analysis.",
+    } satisfies AnalyticsGenerationResult;
+  }
+
+  if (!pdfInputs.length) {
+    return {
+      analytics: null,
+      status: "pdf_fetch_failed",
+      reason: "Uploaded PDFs could not be prepared for analysis.",
+    } satisfies AnalyticsGenerationResult;
+  }
+
+  const schema = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      summary: { type: "string" },
+      units: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            unit: { type: "string" },
+            percentage: { type: "number" },
+            topics: { type: "array", items: { type: "string" } },
+            repeated: { type: "array", items: { type: "string" } },
+            trend: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  year: { type: "string" },
+                  count: { type: "number" },
+                },
+                required: ["year", "count"],
+              },
+            },
+          },
+          required: ["unit", "percentage", "topics", "repeated", "trend"],
+        },
+      },
+    },
+    required: ["summary", "units"],
+  };
+
+  const openAiResponse = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: PYQ_ANALYZER_MODEL,
+      input: [
+        {
+          role: "system",
+          content: [
+            {
+              type: "input_text",
+              text:
+                "Analyze the provided syllabus and previous year question papers. Return only grounded results from the provided inputs. Map insights to syllabus units, estimate weightage percentages, list repeated questions, and produce a year-wise trend. If something is unclear, stay conservative and do not invent details.",
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: `Subject: ${subject.code} - ${subject.name}\nBranch: ${subject.branchId}\nSemester: ${subject.semester}\n\nSyllabus:\n${syllabusText}`,
+            },
+            ...pdfInputs.map((pdf) => ({
+              type: "input_file",
+              filename: pdf.filename,
+              file_data: pdf.file_data,
+            })),
+          ],
+        },
+      ],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "pyq_subject_analysis",
+          strict: true,
+          schema,
+        },
+      },
+    }),
+  });
+
+  if (!openAiResponse.ok) {
+    return {
+      analytics: null,
+      status: "generation_failed",
+      reason: `OpenAI error: ${openAiResponse.status}`,
+    } satisfies AnalyticsGenerationResult;
+  }
+
+  const payload = await openAiResponse.json();
+  const parsed = JSON.parse(payload.output_text || "{}");
+  if (!Array.isArray(parsed.units) || !parsed.units.length) {
+    return {
+      analytics: null,
+      status: "generation_failed",
+      reason: "AI did not return usable analyzer units.",
+    } satisfies AnalyticsGenerationResult;
+  }
+
+  const normalized = {
+    summary: String(parsed.summary || "").trim(),
+    units: parsed.units.map((unit: any) => ({
+      unit: String(unit.unit || "").trim(),
+      percentage: Number(unit.percentage || 0),
+      topics: Array.isArray(unit.topics) ? unit.topics.map((topic: any) => String(topic).trim()).filter(Boolean) : [],
+      repeated: Array.isArray(unit.repeated) ? unit.repeated.map((entry: any) => String(entry).trim()).filter(Boolean) : [],
+      trend: Array.isArray(unit.trend)
+        ? unit.trend.map((entry: any) => ({
+            year: String(entry.year || "").trim(),
+            count: Number(entry.count || 0),
+          }))
+        : [],
+    })),
+    generatedBy: "openai",
+    sourcePaperCount: pdfInputs.length,
+  };
+
+  const saved = await storage.upsertAnalytics(subjectId, normalized);
+  return {
+    analytics: saved,
+    status: "ready",
+  } satisfies AnalyticsGenerationResult;
+}
+
+async function getOrGenerateAnalytics(req: Request, subjectId: string, shouldGenerate: boolean) {
+  const existing = await storage.getAnalytics(subjectId);
+  if (existing || !shouldGenerate) {
+    return existing
+      ? ({ analytics: existing, status: "ready" } satisfies AnalyticsGenerationResult)
+      : ({ analytics: null, status: "not_generated" } satisfies AnalyticsGenerationResult);
+  }
+
+  if (analyticsGenerationLocks.has(subjectId)) {
+    return analyticsGenerationLocks.get(subjectId)!;
+  }
+
+  const pending = generateAnalyticsWithOpenAI(req, subjectId)
+    .catch((error: any) => ({
+      analytics: null,
+      status: "generation_failed",
+      reason: error?.message || "Analyzer generation failed.",
+    }))
+    .finally(() => {
+      analyticsGenerationLocks.delete(subjectId);
+    });
+
+  analyticsGenerationLocks.set(subjectId, pending);
+  return pending;
+}
+
 function slugify(value: string) {
   return value
     .toLowerCase()
@@ -845,7 +1117,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/subjects/:subjectId/analytics", async (req: Request, res: Response) => {
     try {
-      const data = await storage.getAnalytics(req.params.subjectId);
+      const shouldGenerate = String(req.query.generate || "") === "1";
+      const data = await getOrGenerateAnalytics(req, req.params.subjectId, shouldGenerate);
       res.json(data || null);
     } catch (e: any) {
       res.status(500).json({ error: e.message });

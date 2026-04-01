@@ -6,7 +6,7 @@ import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useQuery } from "@tanstack/react-query";
-import type { Branch, Subject, SyllabusUnit, Paper, Video, PyqAnalytics } from "@/lib/rgpv-data";
+import type { Branch, Subject, SyllabusUnit, Paper, Video, PyqAnalytics, PyqAnalyticsResponse } from "@/lib/rgpv-data";
 import { useBookmarks } from "@/lib/bookmarks";
 import { getApiUrl, apiRequest } from "@/lib/query-client";
 import { getViewerUrl } from "@/lib/pdf-viewer";
@@ -15,7 +15,6 @@ import { downloadPaper, isDownloaded, type DownloadItem } from "@/lib/downloads"
 import { ensureProfileComplete } from "@/lib/profile-guard";
 
 type TabType = "syllabus" | "papers" | "videos" | "analyzer";
-
 function SyllabusUnitCard({ unit, index }: { unit: SyllabusUnit; index: number }) {
   const [expanded, setExpanded] = useState(index === 0);
   const { colors } = useTheme();
@@ -239,10 +238,11 @@ export default function SubjectScreen() {
     enabled: !!id,
   });
 
-  const { data: analytics } = useQuery<PyqAnalytics | null>({
-    queryKey: ["/api/subjects/" + id + "/analytics"],
-    enabled: !!id,
+  const { data: analyticsResult, isLoading: analyticsLoading } = useQuery<PyqAnalyticsResponse>({
+    queryKey: ["/api/subjects/" + id + "/analytics?generate=1"],
+    enabled: !!id && activeTab === "analyzer",
   });
+  const analytics = analyticsResult?.analytics || null;
   const [expandedUnitIndex, setExpandedUnitIndex] = useState<number | null>(0);
 
   const { data: branch } = useQuery<Branch>({
@@ -491,8 +491,20 @@ export default function SubjectScreen() {
           </View>
         ) : (
           <View style={styles.contentList}>
-            {analytics && (analytics.units || []).length > 0 ? (
+            {analyticsLoading ? (
+              <View style={styles.emptyPapers}>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={styles.emptyTitle}>Preparing analyzer</Text>
+                <Text style={styles.emptySubtext}>Reading syllabus and uploaded PYQ PDFs with AI. This can take a little time.</Text>
+              </View>
+            ) : analytics && (analytics.units || []).length > 0 ? (
               <>
+                {(analytics as any).summary ? (
+                  <View style={styles.analyticsCard}>
+                    <Text style={styles.analyticsTitle}>AI Summary</Text>
+                    <Text style={styles.analyticsBullet}>{(analytics as any).summary}</Text>
+                  </View>
+                ) : null}
                 {analytics.units!.map((u, i) => {
                   const expanded = expandedUnitIndex === i;
                   return (
@@ -551,7 +563,6 @@ export default function SubjectScreen() {
               <View style={styles.emptyPapers}>
                 <Feather name="bar-chart-2" size={40} color={colors.textMuted} />
                 <Text style={styles.emptyTitle}>No analysis available</Text>
-                <Text style={styles.emptySubtext}>Add analysis in admin panel</Text>
               </View>
             )}
           </View>

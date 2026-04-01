@@ -40,6 +40,7 @@ export interface Video {
 
 export interface PyqAnalytics {
   subjectId: string;
+  summary?: string;
   units?: {
     unit: string;
     percentage?: number;
@@ -47,8 +48,16 @@ export interface PyqAnalytics {
     repeated?: string[];
     trend?: { year: string; count: number }[];
   }[];
+  generatedBy?: string;
+  sourcePaperCount?: number;
   updatedAt?: string;
   createdAt?: string;
+}
+
+export interface PyqAnalyticsResponse {
+  analytics: PyqAnalytics | null;
+  status?: string;
+  reason?: string;
 }
 
 export interface Branch {
