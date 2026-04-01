@@ -172,6 +172,8 @@ export default function SubjectScreen() {
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const [activeTab, setActiveTab] = useState<TabType>("syllabus");
   const [paperFilter, setPaperFilter] = useState<"All" | "Main" | "Supply" | "Back">("All");
+  const [checkingAccess, setCheckingAccess] = useState(true);
+  const [hasAccess, setHasAccess] = useState(false);
   const webTopInset = Platform.OS === "web" ? 67 : 0;
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -195,6 +197,38 @@ export default function SubjectScreen() {
     queryKey: ["/api/branches", subject?.branchId],
     enabled: !!subject?.branchId,
   });
+
+  useEffect(() => {
+    let active = true;
+
+    ensureProfileComplete(() => router.replace("/profile"))
+      .then((ok) => {
+        if (!active) return;
+        setHasAccess(ok);
+        setCheckingAccess(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setHasAccess(false);
+        setCheckingAccess(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (checkingAccess) {
+    return (
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (!hasAccess) {
+    return null;
+  }
 
   if (isLoading) {
     return (
@@ -374,7 +408,11 @@ export default function SubjectScreen() {
               videos.map((video, i) => (
                 <Animated.View key={video.id} entering={FadeInDown.delay(i * 60).duration(400)}>
                   <Pressable
-                    onPress={() => Linking.openURL(video.url)}
+                    onPress={async () => {
+                      const ok = await ensureProfileComplete(() => router.replace("/profile"));
+                      if (!ok) return;
+                      Linking.openURL(video.url);
+                    }}
                     style={({ pressed }) => [
                       styles.videoCard,
                       { transform: [{ scale: pressed ? 0.98 : 1 }] },

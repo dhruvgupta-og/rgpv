@@ -155,6 +155,7 @@ export default function BranchScreen() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.semRow}
         style={styles.semScroll}
+        contentInsetAdjustmentBehavior="automatic"
       >
         {semesters.map(sem => (
           <SemesterPill
@@ -259,6 +260,7 @@ const baseStyles = {
   semScroll: {
     flexGrow: 0,
     borderBottomWidth: 1,
+    minHeight: 70,
   },
   searchBarWrap: {
     paddingHorizontal: 16,
@@ -284,6 +286,7 @@ const baseStyles = {
     paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 8,
+    alignItems: "center",
   },
   semPill: {
     paddingHorizontal: 18,
@@ -292,7 +295,8 @@ const baseStyles = {
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
-    minWidth: 56,
+    minWidth: 64,
+    minHeight: 42,
   },
   semPillActive: {},
   semPillText: {
@@ -306,6 +310,7 @@ const baseStyles = {
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 16,
+    paddingBottom: 8,
   },
   subjectList: {
     gap: 12,

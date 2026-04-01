@@ -67,6 +67,9 @@ export interface Profile {
   branchId: string;
   year: string;
   collegeName: string;
+  phoneNumber: string;
+  email?: string | null;
+  firebaseUid?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }

@@ -230,6 +230,15 @@ export const storage = {
     return payload;
   },
 
+  async updateUser(id: string, data: any) {
+    const ref = db.collection("users").doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return undefined;
+    await ref.set({ ...data, id }, { merge: true });
+    const updated = await ref.get();
+    return updated.data();
+  },
+
   async updateUserLastLogin(id: string) {
     await db.collection("users").doc(id).set({ lastLoginAt: now() }, { merge: true });
   },
@@ -342,21 +351,83 @@ export const storage = {
 
   // ---- PROFILES ----
   async upsertProfile(data: any) {
-    const snap = await db.collection("profiles").where("deviceId", "==", data.deviceId).limit(1).get();
-    if (!snap.empty) {
-      const ref = snap.docs[0].ref;
-      await ref.set({ ...data, updatedAt: now() }, { merge: true });
-      const updated = await ref.get();
-      return updated.data();
+    const firebaseUid = String(data.firebaseUid || "").trim();
+    const deviceId = String(data.deviceId || "").trim();
+
+    let ref: FirebaseFirestore.DocumentReference | null = null;
+    let createdAt = now();
+
+    if (firebaseUid) {
+      ref = db.collection("profiles").doc(firebaseUid);
+      const existing = await ref.get();
+      if (existing.exists) {
+        createdAt = String(existing.data()?.createdAt || createdAt);
+      }
+    } else if (deviceId) {
+      const snap = await db.collection("profiles").where("deviceId", "==", deviceId).limit(1).get();
+      if (!snap.empty) {
+        ref = snap.docs[0].ref;
+        createdAt = String(snap.docs[0].data()?.createdAt || createdAt);
+      }
     }
-    const id = makeId().toString();
-    const payload = { ...data, id, createdAt: now(), updatedAt: now() };
-    await db.collection("profiles").doc(id).set(payload);
-    return payload;
+
+    if (!ref) {
+      const id = firebaseUid || makeId().toString();
+      ref = db.collection("profiles").doc(id);
+    }
+
+    const payload = {
+      ...data,
+      id: ref.id,
+      deviceId: deviceId || ref.id,
+      createdAt,
+      updatedAt: now(),
+    };
+    await ref.set(payload, { merge: true });
+    const updated = await ref.get();
+    return updated.data();
   },
 
   async getProfiles() {
-    const snap = await db.collection("profiles").orderBy("createdAt", "desc").get();
-    return snap.docs.map((d) => d.data());
+    const snap = await db.collection("profiles").get();
+    return snap.docs
+      .map((d) => d.data())
+      .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
+  },
+
+  async getProfileByDeviceId(deviceId: string) {
+    const snap = await db.collection("profiles").where("deviceId", "==", deviceId).limit(1).get();
+    return snap.docs[0]?.data();
+  },
+
+  async deleteProfile(data: { deviceId?: string; firebaseUid?: string }) {
+    const deviceId = String(data.deviceId || "").trim();
+    const firebaseUid = String(data.firebaseUid || "").trim();
+    const refs = new Map<string, FirebaseFirestore.DocumentReference>();
+
+    if (firebaseUid) {
+      const ref = db.collection("profiles").doc(firebaseUid);
+      const snap = await ref.get();
+      if (snap.exists) {
+        refs.set(ref.id, ref);
+      }
+
+      const byFirebaseUid = await db.collection("profiles").where("firebaseUid", "==", firebaseUid).get();
+      byFirebaseUid.docs.forEach((doc) => refs.set(doc.id, doc.ref));
+    }
+
+    if (deviceId) {
+      const snap = await db.collection("profiles").where("deviceId", "==", deviceId).get();
+      snap.docs.forEach((doc) => refs.set(doc.id, doc.ref));
+    }
+
+    if (!refs.size) {
+      return 0;
+    }
+
+    const batch = db.batch();
+    refs.forEach((ref) => batch.delete(ref));
+    await batch.commit();
+    return refs.size;
   },
 };

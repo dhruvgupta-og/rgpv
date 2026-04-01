@@ -100,7 +100,7 @@ function AuthGate() {
     const unsubscribe = ref.onSnapshot(
       (snap) => {
         const data = snap.exists ? (snap.data() as any) : {};
-        const isComplete = !!data?.name && !!data?.branchId && !!data?.year && !!data?.collegeName;
+        const isComplete = !!data?.name && !!data?.branchId && !!data?.year && !!data?.collegeName && !!data?.phoneNumber;
         setProfileComplete(isComplete);
         setProfileReady(true);
         if (!isComplete) {
@@ -153,7 +153,7 @@ function AuthGate() {
             </Text>
           </View>
         ) : null}
-        {profileReady && !profileComplete ? (
+        {profileReady && !profileComplete && pathname !== "/profile" ? (
           <View
             style={{
               position: "absolute",
@@ -179,7 +179,7 @@ function AuthGate() {
                 Complete Your Profile
               </Text>
               <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textSecondary, marginBottom: 14 }}>
-                Please fill your name, branch, year, and college to continue.
+                Please fill your name, branch, year, college, and phone number to continue.
               </Text>
               <Pressable
                 onPress={() => router.replace("/profile")}

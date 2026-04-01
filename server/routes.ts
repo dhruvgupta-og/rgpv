@@ -65,6 +65,18 @@ function parseTopics(raw?: string) {
     .filter(Boolean);
 }
 
+function csvEscape(value: unknown) {
+  const text = String(value ?? "");
+  if (/[",\r\n]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+}
+
+function formatProfileTime(profile: Record<string, any>) {
+  return profile.updatedAt || profile.createdAt || "";
+}
+
 function normalizeBranchId(raw?: string) {
   return (raw || "").trim().toLowerCase();
 }
@@ -284,21 +296,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ---- PROFILES ----
   app.post("/api/profile", async (req: Request, res: Response) => {
     try {
-      const { deviceId, name, branchId, year, collegeName } = req.body || {};
-      if (!deviceId || !name || !branchId || !year || !collegeName) {
+      const { deviceId, name, branchId, year, collegeName, phoneNumber, email, firebaseUid } = req.body || {};
+      if (!deviceId || !name || !branchId || !year || !collegeName || !phoneNumber) {
         return res.status(400).json({ error: "All fields are required" });
       }
-      const profile = await storage.upsertProfile({ deviceId, name, branchId, year, collegeName });
+      const profile = await storage.upsertProfile({
+        deviceId,
+        name,
+        branchId,
+        year,
+        collegeName,
+        phoneNumber,
+        email: email || null,
+        firebaseUid: firebaseUid || null,
+      });
       res.json(profile);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
   });
 
+  const handleProfileDelete = async (req: Request, res: Response) => {
+    try {
+      const deviceId = String(req.body?.deviceId || req.query?.deviceId || "").trim();
+      const firebaseUid = String(req.body?.firebaseUid || req.query?.firebaseUid || "").trim();
+      if (!deviceId && !firebaseUid) {
+        return res.status(400).json({ error: "deviceId or firebaseUid is required" });
+      }
+      const deleted = await storage.deleteProfile({ deviceId, firebaseUid });
+      res.json({ success: true, deleted });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  };
+
+  app.delete("/api/profile", handleProfileDelete);
+  app.post("/api/profile/delete", handleProfileDelete);
+
   app.get("/api/admin/profiles", requireAdmin, async (_req: Request, res: Response) => {
     try {
       const data = await storage.getProfiles();
       res.json(data);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/admin/profiles/export.csv", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const data = await storage.getProfiles();
+      const branches = await storage.getAllBranches();
+      const branchMap = new Map(branches.map((branch: any) => [branch.id, `${branch.shortName} - ${branch.name}`]));
+      const header = [
+        "Name",
+        "Phone Number",
+        "Branch",
+        "Year",
+        "College",
+        "Email",
+        "Device ID",
+        "Firebase UID",
+        "Saved At",
+        "Created At",
+      ];
+      const rows = data.map((profile: any) => [
+        profile.name,
+        profile.phoneNumber,
+        branchMap.get(profile.branchId) || profile.branchId,
+        profile.year,
+        profile.collegeName,
+        profile.email,
+        profile.deviceId,
+        profile.firebaseUid,
+        formatProfileTime(profile),
+        profile.createdAt,
+      ]);
+      const csv = "\uFEFF" + [header, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", 'attachment; filename="profiles-export.csv"');
+      res.send(csv);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

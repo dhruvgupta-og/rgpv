@@ -37,12 +37,22 @@ function verifyPassword(password: string, stored: string): boolean {
 }
 
 export async function ensureBootstrapAdmin(): Promise<void> {
-  const count = await storage.countUsers();
-  if (count > 0) return;
   const username = process.env.ADMIN_BOOTSTRAP_USERNAME || process.env.ADMIN_USERNAME;
   const password = process.env.ADMIN_BOOTSTRAP_PASSWORD || process.env.ADMIN_PASSWORD;
   if (!username || !password) return;
+
+  const existing = await storage.getUserByUsername(username);
   const passwordHash = hashPassword(password);
+
+  if (existing) {
+    await storage.updateUser(existing.id, {
+      username,
+      password: passwordHash,
+      role: "admin",
+    });
+    return;
+  }
+
   await storage.createUser({ username, password: passwordHash, role: "admin" });
 }
 

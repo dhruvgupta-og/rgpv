@@ -1,153 +1,151 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View, ActivityIndicator, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/lib/theme";
-import { auth, db, firebase } from "@/lib/firebase-client";
 import { useQuery } from "@tanstack/react-query";
 import type { Branch } from "@/lib/rgpv-data";
-import * as Google from "expo-auth-session/providers/google";
-import * as WebBrowser from "expo-web-browser";
-import * as AuthSession from "expo-auth-session";
-import Constants from "expo-constants";
+import { Feather } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { auth, db, firebase } from "@/lib/firebase-client";
+import { apiRequest } from "@/lib/query-client";
+import {
+  clearStoredProfile,
+  getOrCreateProfileDeviceId,
+  getStoredProfile,
+  isStoredProfileComplete,
+  saveStoredProfile,
+  type StoredProfile,
+} from "@/lib/profile-storage";
 
-WebBrowser.maybeCompleteAuthSession();
-
-const semesters = [
-  { value: "1", label: "1st" },
-  { value: "2", label: "2nd" },
-  { value: "3", label: "3rd" },
-  { value: "4", label: "4th" },
-  { value: "5", label: "5th" },
-  { value: "6", label: "6th" },
-  { value: "7", label: "7th" },
-  { value: "8", label: "8th" },
+const years = [
+  { value: "1", label: "1st Year" },
+  { value: "2", label: "2nd Year" },
+  { value: "3", label: "3rd Year" },
+  { value: "4", label: "4th Year" },
 ];
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const bottomOffset = Platform.OS === "web" ? 120 : insets.bottom + 104;
 
-  const [user, setUser] = useState<firebase.User | null>(null);
   const [name, setName] = useState("");
   const [branchId, setBranchId] = useState("");
   const [year, setYear] = useState("");
   const [collegeName, setCollegeName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [saving, setSaving] = useState(false);
-  const [loadingProfile, setLoadingProfile] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(true);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(true);
-  const [authStatus, setAuthStatus] = useState("");
 
   const { data: branches = [] } = useQuery<Branch[]>({
     queryKey: ["/api/branches"],
   });
 
-  const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || undefined;
-  const googleAndroidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || undefined;
-  const isExpoGo = Constants.appOwnership === "expo" || Constants.executionEnvironment === "storeClient";
-  const useProxy = isExpoGo;
-  const androidRedirectScheme = googleAndroidClientId
-    ? `com.googleusercontent.apps.${googleAndroidClientId.split(".apps.googleusercontent.com")[0]}`
-    : "com.googleusercontent.apps";
-  const redirectUri = AuthSession.makeRedirectUri(
-    isExpoGo
-      ? { useProxy: true, projectNameForProxy: "@dhruvhereyo0s-organization/rgpv-pyq" }
-      : { scheme: androidRedirectScheme },
-  );
-  const promptOptions = isExpoGo ? { useProxy: true, projectNameForProxy: "@dhruvhereyo0s-organization/rgpv-pyq" } : undefined;
-
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId: googleWebClientId,
-    expoClientId: googleWebClientId,
-    androidClientId: googleAndroidClientId,
-    redirectUri,
-    useProxy,
-  });
-
   useEffect(() => {
-    return auth.onAuthStateChanged((u) => {
-      setUser(u);
-      if (u) {
-        loadProfile(u).catch(() => {});
+    let active = true;
+
+    const loadProfile = async () => {
+      try {
+        const localProfile = await getStoredProfile();
+        const user = auth.currentUser;
+        let remoteProfile: Partial<StoredProfile> | null = null;
+
+        if (user) {
+          const snap = await db.collection("profiles").doc(user.uid).get();
+          if (snap.exists) {
+            remoteProfile = snap.data() as Partial<StoredProfile>;
+          }
+        }
+
+        const profile: StoredProfile = {
+          name: remoteProfile?.name || localProfile?.name || "",
+          branchId: remoteProfile?.branchId || localProfile?.branchId || "",
+          year: remoteProfile?.year || localProfile?.year || "",
+          collegeName: remoteProfile?.collegeName || localProfile?.collegeName || "",
+          phoneNumber: remoteProfile?.phoneNumber || localProfile?.phoneNumber || "",
+          deviceId: localProfile?.deviceId || remoteProfile?.deviceId,
+        };
+
+        if (!active) {
+          return;
+        }
+
+        setName(profile.name);
+        setBranchId(profile.branchId);
+        setYear(profile.year);
+        setCollegeName(profile.collegeName);
+        setPhoneNumber(profile.phoneNumber);
+
+        if (isStoredProfileComplete(profile)) {
+          setShowForm(false);
+          setLastSavedAt(new Date().toLocaleString());
+        }
+      } catch (e) {
+        console.error("Failed to load profile", e);
+      } finally {
+        if (active) {
+          setLoadingProfile(false);
+        }
       }
-    });
+    };
+
+    loadProfile();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
-  useEffect(() => {
-    if (response?.type === "success") {
-      const idToken = response.authentication?.idToken;
-      const accessToken = response.authentication?.accessToken;
-      if (!idToken && !accessToken) return;
-      const credential = firebase.auth.GoogleAuthProvider.credential(idToken, accessToken);
-      auth.signInWithCredential(credential).catch((e) => {
-        Alert.alert("Google login failed", e.message);
-      });
-    }
-  }, [response]);
-
-  const loadProfile = async (u: firebase.User) => {
-    setLoadingProfile(true);
-    const ref = db.collection("profiles").doc(u.uid);
-    const snap = await ref.get();
-    if (snap.exists) {
-      const data = snap.data() as any;
-      setName(data.name || u.displayName || "");
-      setBranchId(data.branchId || "");
-      setYear(data.year || "");
-      setCollegeName(data.collegeName || "");
-    } else {
-      setName(u.displayName || "");
-    }
-    setLoadingProfile(false);
-  };
-
-  const handleGoogleLogin = async () => {
-    if (Platform.OS === "web") {
-      try {
-        setAuthStatus("Opening Google...");
-        await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
-        setAuthStatus("");
-      } catch (e: any) {
-        setAuthStatus("");
-        console.error("Google login failed", e);
-        Alert.alert("Google login failed", e.message);
-      }
-      return;
-    }
-    if (!isExpoGo && !googleAndroidClientId) {
-      Alert.alert("Google login not configured", "Set EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID in .env and eas.json.");
-      return;
-    }
-    await promptAsync(promptOptions);
-  };
-
   const handleSave = async () => {
-    if (!user) return;
-    if (!name || !branchId || !year || !collegeName) {
+    const deviceId = await getOrCreateProfileDeviceId();
+    const profile: StoredProfile = {
+      name: name.trim(),
+      branchId,
+      year,
+      collegeName: collegeName.trim(),
+      phoneNumber: phoneNumber.trim(),
+      deviceId,
+    };
+
+    if (!isStoredProfileComplete(profile)) {
       Alert.alert("Missing info", "Please fill all fields.");
       return;
     }
+
     setSaving(true);
+
     try {
-      const ref = db.collection("profiles").doc(user.uid);
-      await ref.set(
-        {
-          id: user.uid,
-          deviceId: user.uid,
-          email: user.email || "",
-          name,
-          branchId,
-          year,
-          collegeName,
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true },
-      );
+      const user = auth.currentUser;
+      await apiRequest("POST", "/api/profile", {
+        ...profile,
+        email: user?.email || null,
+        firebaseUid: user?.uid || null,
+      });
+      await saveStoredProfile(profile);
+
+      if (user) {
+        await db.collection("profiles").doc(user.uid).set(
+          {
+            ...profile,
+            email: user.email || null,
+            firebaseUid: user.uid,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
+      }
+
+      setName(profile.name);
+      setCollegeName(profile.collegeName);
+      setPhoneNumber(profile.phoneNumber);
       setLastSavedAt(new Date().toLocaleString());
       setShowForm(false);
-      Alert.alert("Saved", "Profile updated.");
+      Alert.alert("Success", "Profile saved successfully!");
     } catch (e: any) {
       Alert.alert("Save failed", e.message);
     } finally {
@@ -155,133 +153,272 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleLogout = async () => {
-    await auth.signOut();
-    setUser(null);
+  const handleEditProfile = () => {
+    setShowForm(true);
   };
+
+  const resetProfileState = () => {
+    setName("");
+    setBranchId("");
+    setYear("");
+    setCollegeName("");
+    setPhoneNumber("");
+    setLastSavedAt(null);
+    setShowForm(true);
+  };
+
+  const deleteFirestoreProfiles = async (deviceId?: string | null, firebaseUid?: string | null) => {
+    const refs = new Map<string, firebase.firestore.DocumentReference>();
+
+    if (firebaseUid) {
+      refs.set(firebaseUid, db.collection("profiles").doc(firebaseUid));
+
+      const firebaseUidSnap = await db.collection("profiles").where("firebaseUid", "==", firebaseUid).get();
+      firebaseUidSnap.docs.forEach((doc) => refs.set(doc.id, doc.ref));
+    }
+
+    if (deviceId) {
+      const deviceSnap = await db.collection("profiles").where("deviceId", "==", deviceId).get();
+      deviceSnap.docs.forEach((doc) => refs.set(doc.id, doc.ref));
+    }
+
+    if (!refs.size) {
+      return 0;
+    }
+
+    const batch = db.batch();
+    refs.forEach((ref) => batch.delete(ref));
+    await batch.commit();
+    return refs.size;
+  };
+
+  const performDeleteProfile = async () => {
+    setDeleting(true);
+    try {
+      const localProfile = await getStoredProfile();
+      const user = auth.currentUser;
+
+      const localDeleted = await deleteFirestoreProfiles(localProfile?.deviceId || null, user?.uid || null).catch(() => 0);
+
+      let apiDeleted = 0;
+      try {
+        const response = await apiRequest("POST", "/api/profile/delete", {
+          deviceId: localProfile?.deviceId || null,
+          firebaseUid: user?.uid || null,
+        });
+        const result = await response.json();
+        apiDeleted = Number(result?.deleted || 0);
+      } catch {
+        apiDeleted = 0;
+      }
+
+      await clearStoredProfile();
+      resetProfileState();
+
+      const removed = Math.max(localDeleted, apiDeleted);
+      Alert.alert("Deleted", `Your profile has been deleted.${removed ? ` Removed records: ${removed}` : ""}`);
+    } catch (e: any) {
+      Alert.alert("Delete failed", e.message);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleDeleteProfile = () => {
+    const message = "This will remove your saved profile. You can create it again later.";
+
+    if (Platform.OS === "web") {
+      const confirmed = globalThis.confirm?.(`Delete Profile\n\n${message}`) ?? true;
+      if (!confirmed) return;
+      performDeleteProfile();
+      return;
+    }
+
+    Alert.alert("Delete Profile", message, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          performDeleteProfile();
+        },
+      },
+    ]);
+  };
+
+  if (loadingProfile) {
+    return (
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  const selectedBranch = branches.find((b) => b.id === branchId);
 
   return (
     <ScrollView
       contentContainerStyle={[
         styles.container,
-        { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 },
+        { paddingTop: insets.top + 16, paddingBottom: bottomOffset },
       ]}
+      keyboardShouldPersistTaps="handled"
+      contentInsetAdjustmentBehavior="automatic"
+      showsVerticalScrollIndicator={false}
     >
-      <Text style={styles.header}>Academic Selection</Text>
-      <Text style={styles.heroTitle}>Personalize Your Experience</Text>
-      <Text style={styles.heroSubtitle}>
-        Choose your branch and current semester to get relevant study materials.
-      </Text>
+      {showForm ? (
+        <>
+          <LinearGradient
+            colors={[colors.primary + "20", colors.background]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.headerGradient}
+          >
+            <Text style={styles.header}>Create Your Profile</Text>
+            <Text style={styles.heroTitle}>Personalize Your Experience</Text>
+            <Text style={styles.heroSubtitle}>
+              Tell us about yourself to keep your study profile ready
+            </Text>
+          </LinearGradient>
 
-      {!user ? (
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Google Sign In Required</Text>
-          <Text style={styles.subText}>Please continue with Google to access your profile.</Text>
-          {!!authStatus && <Text style={styles.subText}>{authStatus}</Text>}
-          <Pressable style={styles.primaryBtn} onPress={handleGoogleLogin} disabled={!request && Platform.OS !== "web"}>
-            <Text style={styles.primaryBtnText}>Continue with Google</Text>
-          </Pressable>
-        </View>
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Select Your Branch</Text>
+            <View style={styles.grid}>
+              {branches.map((b) => (
+                <Pressable
+                  key={b.id}
+                  onPress={() => setBranchId(b.id)}
+                  style={[styles.cardItem, branchId === b.id && styles.cardItemActive]}
+                >
+                  <View style={[styles.cardIcon, branchId === b.id && styles.cardIconActive]}>
+                    <Text style={[styles.cardIconText, branchId === b.id && styles.cardIconTextActive]}>
+                      {b.shortName}
+                    </Text>
+                  </View>
+                  <Text style={[styles.cardText, branchId === b.id && styles.cardTextActive]}>
+                    {b.name}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Text style={styles.sectionTitle}>Select Your Year</Text>
+            <View style={styles.semesterRow}>
+              {years.map((s) => (
+                <Pressable
+                  key={s.value}
+                  onPress={() => setYear(s.value)}
+                  style={[styles.semesterChip, year === s.value && styles.semesterChipActive]}
+                >
+                  <Text style={[styles.semesterText, year === s.value && styles.semesterTextActive]}>
+                    {s.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Text style={styles.sectionTitle}>Your Details</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Full Name"
+              placeholderTextColor={colors.textMuted}
+              value={name}
+              onChangeText={setName}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="College Name"
+              placeholderTextColor={colors.textMuted}
+              value={collegeName}
+              onChangeText={setCollegeName}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Phone Number"
+              placeholderTextColor={colors.textMuted}
+              value={phoneNumber}
+              onChangeText={setPhoneNumber}
+              keyboardType="phone-pad"
+            />
+            <Pressable style={styles.primaryBtn} onPress={handleSave} disabled={saving}>
+              <Text style={styles.primaryBtnText}>{saving ? "Saving..." : "Save Profile"}</Text>
+            </Pressable>
+          </View>
+        </>
       ) : (
-        <View style={styles.card}>
-          {showForm ? (
-            <>
-              <Text style={styles.sectionTitle}>Select Your Branch</Text>
-              <View style={styles.grid}>
-                {branches.map((b) => (
-                  <Pressable
-                    key={b.id}
-                    onPress={() => setBranchId(b.id)}
-                    style={[styles.cardItem, branchId === b.id && styles.cardItemActive]}
-                  >
-                    <View style={[styles.cardIcon, branchId === b.id && styles.cardIconActive]}>
-                      <Text style={[styles.cardIconText, branchId === b.id && styles.cardIconTextActive]}>
-                        {b.shortName}
-                      </Text>
-                    </View>
-                    <Text style={[styles.cardText, branchId === b.id && styles.cardTextActive]}>
-                      {b.name}
-                    </Text>
-                  </Pressable>
-                ))}
+        <>
+          <LinearGradient
+            colors={[selectedBranch?.color + "25" || colors.primary + "25", colors.background]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.profileHeaderGradient}
+          >
+            <View style={styles.profileHeader}>
+              <View style={[styles.avatarCircle, { backgroundColor: selectedBranch?.color || colors.primary }]}>
+                <Text style={styles.avatarText}>{name.charAt(0).toUpperCase()}</Text>
               </View>
+              <View style={styles.profileInfo}>
+                <Text style={styles.profileName}>{name}</Text>
+                <Text style={styles.profileBranch}>{selectedBranch?.shortName || branchId}</Text>
+                <Text style={styles.profileYear}>Year {year}</Text>
+              </View>
+            </View>
+          </LinearGradient>
 
-              <Text style={styles.sectionTitle}>Select Your Semester</Text>
-              <View style={styles.semesterRow}>
-                {semesters.map((s) => (
-                  <Pressable
-                    key={s.value}
-                    onPress={() => setYear(s.value)}
-                    style={[styles.semesterChip, year === s.value && styles.semesterChipActive]}
-                  >
-                    <Text style={[styles.semesterText, year === s.value && styles.semesterTextActive]}>
-                      {s.label}
-                    </Text>
-                  </Pressable>
-                ))}
+          <View style={styles.detailsCard}>
+            <View style={styles.detailRow}>
+              <View style={styles.detailIconBox}>
+                <Feather name="book" size={20} color={colors.primary} />
               </View>
+              <View style={styles.detailContent}>
+                <Text style={styles.detailLabel}>Branch</Text>
+                <Text style={styles.detailValue}>{selectedBranch?.name || branchId}</Text>
+              </View>
+            </View>
 
-              <Text style={styles.sectionTitle}>Your Details</Text>
-              <Text style={styles.subText}>Signed in as {user.email}</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Full Name"
-                placeholderTextColor={colors.textMuted}
-                value={name}
-                onChangeText={setName}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="College Name"
-                placeholderTextColor={colors.textMuted}
-                value={collegeName}
-                onChangeText={setCollegeName}
-              />
-              <Pressable style={styles.primaryBtn} onPress={handleSave} disabled={saving || loadingProfile}>
-                <Text style={styles.primaryBtnText}>{saving ? "Saving..." : "Save Profile"}</Text>
-              </Pressable>
-            </>
-          ) : null}
-          {!showForm ? (
-            <>
-              <View style={styles.dashboardCard}>
-            <Text style={styles.sectionTitle}>Profile Dashboard</Text>
-            <Text style={styles.subText}>Overview of your saved details</Text>
-            <View style={styles.dashboardRow}>
-              <Text style={styles.dashboardLabel}>Name</Text>
-              <Text style={styles.dashboardValue}>{name || "-"}</Text>
-            </View>
-            <View style={styles.dashboardRow}>
-              <Text style={styles.dashboardLabel}>Branch</Text>
-              <Text style={styles.dashboardValue}>
-                {branches.find((b) => b.id === branchId)?.shortName || branchId || "-"}
-              </Text>
-            </View>
-            <View style={styles.dashboardRow}>
-              <Text style={styles.dashboardLabel}>Year</Text>
-              <Text style={styles.dashboardValue}>{year ? `Year ${year}` : "-"}</Text>
-            </View>
-            <View style={styles.dashboardRow}>
-              <Text style={styles.dashboardLabel}>College</Text>
-              <Text style={styles.dashboardValue}>{collegeName || "-"}</Text>
-            </View>
-            <View style={styles.dashboardRow}>
-              <Text style={styles.dashboardLabel}>Email</Text>
-              <Text style={styles.dashboardValue}>{user.email || "-"}</Text>
-            </View>
-            {lastSavedAt ? (
-              <Text style={styles.subText}>Last saved: {lastSavedAt}</Text>
-            ) : null}
+            <View style={styles.detailRow}>
+              <View style={styles.detailIconBox}>
+                <Feather name="calendar" size={20} color={colors.primary} />
               </View>
-              <Pressable style={styles.primaryBtn} onPress={() => setShowForm(true)}>
-                <Text style={styles.primaryBtnText}>Edit Profile</Text>
-              </Pressable>
-            </>
-          ) : null}
-          <Pressable style={styles.outlineBtn} onPress={handleLogout}>
-            <Text style={styles.outlineBtnText}>Logout</Text>
-          </Pressable>
-        </View>
+              <View style={styles.detailContent}>
+                <Text style={styles.detailLabel}>Current Year</Text>
+                <Text style={styles.detailValue}>Year {year}</Text>
+              </View>
+            </View>
+
+            <View style={styles.detailRow}>
+              <View style={styles.detailIconBox}>
+                <Feather name="building" size={20} color={colors.primary} />
+              </View>
+              <View style={styles.detailContent}>
+                <Text style={styles.detailLabel}>College</Text>
+                <Text style={styles.detailValue}>{collegeName}</Text>
+              </View>
+            </View>
+
+            <View style={styles.detailRow}>
+              <View style={styles.detailIconBox}>
+                <Feather name="phone" size={20} color={colors.primary} />
+              </View>
+              <View style={styles.detailContent}>
+                <Text style={styles.detailLabel}>Phone</Text>
+                <Text style={styles.detailValue}>{phoneNumber}</Text>
+              </View>
+            </View>
+            {lastSavedAt ? <Text style={styles.savedAtText}>Last saved: {lastSavedAt}</Text> : null}
+          </View>
+
+          <View style={styles.actionButtons}>
+            <Pressable style={styles.primaryBtn} onPress={handleEditProfile}>
+              <Feather name="edit-2" size={16} color="white" />
+              <Text style={styles.primaryBtnText}>Edit Profile</Text>
+            </Pressable>
+            <Pressable style={styles.deleteBtn} onPress={handleDeleteProfile} disabled={deleting}>
+              <Feather name="trash-2" size={16} color="white" />
+              <Text style={styles.primaryBtnText}>{deleting ? "Deleting..." : "Delete Profile"}</Text>
+            </Pressable>
+          </View>
+        </>
       )}
     </ScrollView>
   );
@@ -291,106 +428,89 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
   return StyleSheet.create({
     container: {
       paddingHorizontal: 20,
-      backgroundColor: "#F5F8FC",
+      backgroundColor: colors.background,
       flexGrow: 1,
+    },
+    headerGradient: {
+      borderRadius: 20,
+      padding: 24,
+      marginBottom: 20,
+      overflow: "hidden",
     },
     header: {
       fontFamily: "Inter_600SemiBold",
-      fontSize: 16,
-      color: "#2A3B52",
+      fontSize: 14,
+      color: colors.primary,
       textAlign: "center",
-      marginBottom: 10,
+      marginBottom: 8,
+      letterSpacing: 1,
     },
     heroTitle: {
       fontFamily: "Inter_700Bold",
       fontSize: 26,
-      color: "#1E2A3A",
+      color: colors.text,
       textAlign: "center",
       marginBottom: 8,
     },
     heroSubtitle: {
       fontFamily: "Inter_400Regular",
       fontSize: 13,
-      color: "#6B7A90",
+      color: colors.textSecondary,
       textAlign: "center",
-      marginBottom: 18,
     },
     card: {
-      backgroundColor: "white",
-      borderColor: "#E3ECF9",
+      backgroundColor: colors.card,
+      borderColor: colors.cardBorder,
       borderWidth: 1,
       borderRadius: 18,
       padding: 16,
       gap: 12,
+      marginBottom: 16,
     },
     sectionTitle: {
       fontFamily: "Inter_600SemiBold",
       fontSize: 16,
-      color: "#1E2A3A",
+      color: colors.text,
       marginTop: 6,
     },
     subText: {
       fontFamily: "Inter_400Regular",
       fontSize: 12,
-      color: "#6B7A90",
+      color: colors.textSecondary,
     },
     input: {
       borderWidth: 1,
-      borderColor: "#E3ECF9",
-      backgroundColor: "#F9FBFF",
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.background,
       borderRadius: 10,
       paddingHorizontal: 12,
       paddingVertical: 10,
       fontFamily: "Inter_400Regular",
-      color: "#1E2A3A",
+      color: colors.text,
     },
     primaryBtn: {
-      backgroundColor: "#2E8BFF",
+      backgroundColor: colors.primary,
       borderRadius: 10,
-      paddingVertical: 10,
+      paddingVertical: 12,
       paddingHorizontal: 14,
       alignItems: "center",
-      flex: 1,
+      justifyContent: "center",
+      flexDirection: "row",
+      gap: 8,
+    },
+    deleteBtn: {
+      backgroundColor: colors.danger,
+      borderRadius: 10,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+      alignItems: "center",
+      justifyContent: "center",
+      flexDirection: "row",
+      gap: 8,
     },
     primaryBtnText: {
       fontFamily: "Inter_600SemiBold",
       color: "white",
-    },
-    outlineBtn: {
-      borderWidth: 1,
-      borderColor: "#E3ECF9",
-      borderRadius: 10,
-      paddingVertical: 10,
-      paddingHorizontal: 14,
-      alignItems: "center",
-      flex: 1,
-    },
-    outlineBtnText: {
-      fontFamily: "Inter_600SemiBold",
-      color: colors.text,
-    },
-    dashboardCard: {
-      borderWidth: 1,
-      borderColor: "#E3ECF9",
-      borderRadius: 14,
-      padding: 14,
-      gap: 8,
-      backgroundColor: "#F9FBFF",
-    },
-    dashboardRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      gap: 10,
-    },
-    dashboardLabel: {
-      fontFamily: "Inter_500Medium",
-      fontSize: 12,
-      color: "#6B7A90",
-    },
-    dashboardValue: {
-      fontFamily: "Inter_600SemiBold",
-      fontSize: 12,
-      color: colors.text,
     },
     grid: {
       flexDirection: "row",
@@ -398,34 +518,36 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
       gap: 12,
     },
     cardItem: {
-      width: "48%",
+      flexBasis: "48%",
+      flexGrow: 1,
+      minWidth: 140,
       borderRadius: 18,
       padding: 14,
       borderWidth: 2,
-      borderColor: "#E3ECF9",
-      backgroundColor: "#FFFFFF",
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
       alignItems: "center",
       gap: 10,
     },
     cardItemActive: {
-      borderColor: "#2E8BFF",
-      backgroundColor: "#EAF2FF",
+      borderColor: colors.primary,
+      backgroundColor: colors.primary + "18",
     },
     cardIcon: {
       width: 44,
       height: 44,
       borderRadius: 22,
-      backgroundColor: "#EEF3FA",
+      backgroundColor: colors.primary + "15",
       alignItems: "center",
       justifyContent: "center",
     },
     cardIconActive: {
-      backgroundColor: "#2E8BFF",
+      backgroundColor: colors.primary,
     },
     cardIconText: {
       fontFamily: "Inter_600SemiBold",
       fontSize: 12,
-      color: "#65758C",
+      color: colors.primary,
     },
     cardIconTextActive: {
       color: "white",
@@ -433,11 +555,11 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
     cardText: {
       fontFamily: "Inter_600SemiBold",
       fontSize: 12,
-      color: "#1E2A3A",
+      color: colors.text,
       textAlign: "center",
     },
     cardTextActive: {
-      color: "#1E2A3A",
+      color: colors.text,
     },
     semesterRow: {
       flexDirection: "row",
@@ -445,24 +567,116 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
       gap: 10,
     },
     semesterChip: {
+      flexBasis: "48%",
+      flexGrow: 1,
+      minWidth: 130,
       paddingHorizontal: 16,
-      paddingVertical: 10,
-      borderRadius: 999,
+      paddingVertical: 12,
+      borderRadius: 14,
       borderWidth: 1,
-      borderColor: "#E3ECF9",
-      backgroundColor: "white",
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
+      alignItems: "center",
     },
     semesterChipActive: {
-      backgroundColor: "#2E8BFF",
-      borderColor: "#2E8BFF",
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
     },
     semesterText: {
       fontFamily: "Inter_600SemiBold",
       fontSize: 12,
-      color: "#1E2A3A",
+      color: colors.text,
     },
     semesterTextActive: {
       color: "white",
+    },
+    // Profile Display Styles
+    profileHeaderGradient: {
+      borderRadius: 20,
+      padding: 24,
+      marginBottom: 20,
+      overflow: "hidden",
+    },
+    profileHeader: {
+      alignItems: "center",
+      gap: 16,
+    },
+    avatarCircle: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    avatarText: {
+      fontFamily: "Inter_700Bold",
+      fontSize: 32,
+      color: "white",
+    },
+    profileInfo: {
+      alignItems: "center",
+      gap: 4,
+    },
+    profileName: {
+      fontFamily: "Inter_700Bold",
+      fontSize: 22,
+      color: colors.text,
+    },
+    profileBranch: {
+      fontFamily: "Inter_600SemiBold",
+      fontSize: 14,
+      color: colors.primary,
+    },
+    profileYear: {
+      fontFamily: "Inter_500Medium",
+      fontSize: 12,
+      color: colors.textSecondary,
+    },
+    detailsCard: {
+      backgroundColor: colors.card,
+      borderColor: colors.cardBorder,
+      borderWidth: 1,
+      borderRadius: 16,
+      padding: 16,
+      gap: 16,
+      marginBottom: 20,
+    },
+    detailRow: {
+      flexDirection: "row",
+      gap: 12,
+      alignItems: "center",
+    },
+    detailIconBox: {
+      width: 40,
+      height: 40,
+      borderRadius: 10,
+      backgroundColor: colors.primary + "15",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    detailContent: {
+      flex: 1,
+      gap: 2,
+    },
+    detailLabel: {
+      fontFamily: "Inter_500Medium",
+      fontSize: 12,
+      color: colors.textSecondary,
+    },
+    detailValue: {
+      fontFamily: "Inter_600SemiBold",
+      fontSize: 14,
+      color: colors.text,
+    },
+    savedAtText: {
+      fontFamily: "Inter_400Regular",
+      fontSize: 12,
+      color: colors.textSecondary,
+      marginTop: 2,
+    },
+    actionButtons: {
+      gap: 10,
+      marginTop: 10,
     },
   });
 }

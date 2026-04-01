@@ -1,10 +1,9 @@
 import { useLocalSearchParams, router } from "expo-router";
-import { StyleSheet, View, Pressable, Text } from "react-native";
+import { StyleSheet, View, Pressable, Text, Platform, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Platform } from "react-native";
 import { WebView } from "react-native-webview";
 import { useTheme } from "@/lib/theme";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { ensureProfileComplete } from "@/lib/profile-guard";
 
@@ -13,11 +12,50 @@ export default function PdfViewerScreen() {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [checkingAccess, setCheckingAccess] = useState(true);
+  const [hasAccess, setHasAccess] = useState(false);
 
   const decodedUrl = url ? decodeURIComponent(url) : "";
   useEffect(() => {
-    ensureProfileComplete(() => router.replace("/profile"));
+    let active = true;
+
+    ensureProfileComplete(() => router.replace("/profile"))
+      .then((ok) => {
+        if (!active) return;
+        setHasAccess(ok);
+        setCheckingAccess(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setHasAccess(false);
+        setCheckingAccess(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
+
+  if (checkingAccess) {
+    return (
+      <View style={styles.container}>
+        <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
+          <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
+            <Ionicons name="arrow-back" size={22} color={colors.text} />
+          </Pressable>
+          <Text style={styles.topBarTitle}>PDF Viewer</Text>
+          <View style={{ width: 36 }} />
+        </View>
+        <View style={styles.empty}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </View>
+    );
+  }
+
+  if (!hasAccess) {
+    return null;
+  }
 
   return (
     <View style={styles.container}>

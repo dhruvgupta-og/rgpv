@@ -424,11 +424,14 @@
     <div id="section-profiles" class="section">
       <div class="page-header">
         <div><h1>User Profiles</h1><p>Collected from the app</p></div>
-        <button class="btn btn-outline" onclick="loadProfiles()">Refresh</button>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn btn-outline" onclick="loadProfiles()">Refresh</button>
+          <button class="btn btn-primary" onclick="downloadProfilesCsv()">Export CSV</button>
+        </div>
       </div>
       <div class="card">
         <table>
-          <thead><tr><th>Name</th><th>Branch</th><th>Year</th><th>College</th><th>Device</th><th>Updated</th></tr></thead>
+          <thead><tr><th>Name</th><th>Phone</th><th>Branch</th><th>Year</th><th>College</th><th>Email</th><th>Saved At</th></tr></thead>
           <tbody id="profiles-table"></tbody>
         </table>
       </div>
@@ -800,10 +803,25 @@
     }
 
     // ---- SYLLABUS ----
+    function getBranchLabel(branchId) {
+      const branch = allBranches.find(b => b.id === branchId);
+      return branch ? branch.shortName : (branchId || '').toUpperCase();
+    }
+
+    function formatSubjectLabel(subject) {
+      const branchLabel = getBranchLabel(subject.branchId);
+      const semLabel = subject.semester ? `Sem ${subject.semester}` : 'Sem -';
+      return `${subject.code} - ${subject.name} | ${branchLabel} | ${semLabel}`;
+    }
+
     function populateSubjectDropdowns() {
-      api('/api/subjects').then(subjects => {
+      Promise.all([
+        allBranches.length ? Promise.resolve(allBranches) : api('/api/branches'),
+        api('/api/subjects'),
+      ]).then(([branches, subjects]) => {
+        allBranches = branches;
         allSubjects = subjects;
-        const opts = subjects.map(s => `<option value="${s.id}">${s.code} - ${s.name}</option>`).join('');
+        const opts = subjects.map(s => `<option value="${s.id}">${formatSubjectLabel(s)}</option>`).join('');
         document.getElementById('syllabus-subject-filter').innerHTML = '<option value="">Select a subject</option>' + opts;
         document.getElementById('syllabus-subject').innerHTML = opts;
         document.getElementById('paper-subject-filter').innerHTML = '<option value="">All Papers</option>' + opts;
@@ -902,7 +920,7 @@
           const pdfBadge = p.pdfPath ? `<span class="pdf-badge pdf-yes"><a href="${p.pdfPath}" target="_blank" style="color:inherit;text-decoration:none;">View PDF</a></span>` : '<span class="pdf-badge pdf-no">No PDF</span>';
           const previewBtn = p.pdfPath ? `<button class="btn btn-outline btn-sm" onclick="previewPdf('${p.pdfPath}')">Preview</button>` : '';
           return `<tr>
-            <td>${subject ? subject.code + ' - ' + subject.name : p.subjectId}</td>
+            <td>${subject ? formatSubjectLabel(subject) : p.subjectId}</td>
             <td>${p.year}</td>
             <td>${p.month}</td>
             <td><span class="badge ${typeBadge}">${p.examType}</span></td>
@@ -981,7 +999,7 @@
 
     function addPaperRow(data = {}) {
       const tbody = document.getElementById('quick-papers-table');
-      const subjectOptions = allSubjects.map(s => `<option value="${s.code}">${s.code} - ${s.name}</option>`).join('');
+      const subjectOptions = allSubjects.map(s => `<option value="${s.id}">${formatSubjectLabel(s)}</option>`).join('');
       const row = document.createElement('tr');
       row.innerHTML = `
         <td>
@@ -1323,24 +1341,34 @@
 
     async function loadProfiles() {
       try {
+        if (!allBranches.length) {
+          allBranches = await api('/api/branches');
+        }
         const data = await api('/api/admin/profiles');
         const tbody = document.getElementById('profiles-table');
         if (!data.length) {
-          tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><p>No profiles yet.</p></div></td></tr>';
+          tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><p>No profiles yet.</p></div></td></tr>';
           return;
         }
         tbody.innerHTML = data.map(p => {
-          const time = p.updatedAt ? new Date(p.updatedAt).toLocaleString() : '';
+          const time = (p.updatedAt || p.createdAt) ? new Date(p.updatedAt || p.createdAt).toLocaleString() : '';
+          const branch = allBranches.find(b => b.id === p.branchId);
+          const branchLabel = branch ? `${branch.shortName} - ${branch.name}` : (p.branchId || '-');
           return `<tr>
             <td><strong>${p.name}</strong></td>
-            <td>${p.branchId}</td>
+            <td>${p.phoneNumber || '-'}</td>
+            <td>${branchLabel}</td>
             <td>${p.year}</td>
             <td>${p.collegeName}</td>
-            <td>${p.deviceId}</td>
+            <td>${p.email || '-'}</td>
             <td>${time}</td>
           </tr>`;
         }).join('');
       } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function downloadProfilesCsv() {
+      window.location.href = API + '/api/admin/profiles/export.csv';
     }
 
     // Init
