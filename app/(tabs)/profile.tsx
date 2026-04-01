@@ -4,12 +4,13 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View, Activi
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/lib/theme";
 import { useQuery } from "@tanstack/react-query";
-import type { Branch } from "@/lib/rgpv-data";
+import type { Branch, Subject } from "@/lib/rgpv-data";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { auth, db, firebase } from "@/lib/firebase-client";
 import { apiRequest } from "@/lib/query-client";
 import { getViewerUrl } from "@/lib/pdf-viewer";
+import { useBookmarks } from "@/lib/bookmarks";
 import {
   clearStoredProfile,
   getOrCreateProfileDeviceId,
@@ -32,6 +33,7 @@ export default function ProfileScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const bottomOffset = Platform.OS === "web" ? 120 : insets.bottom + 104;
+  const { bookmarks, toggleBookmark, isLoading: bookmarksLoading } = useBookmarks();
 
   const [name, setName] = useState("");
   const [branchId, setBranchId] = useState("");
@@ -46,8 +48,11 @@ export default function ProfileScreen() {
   const [downloads, setDownloads] = useState<DownloadItem[]>([]);
   const [loadingDownloads, setLoadingDownloads] = useState(true);
 
-  const { data: branches = [] } = useQuery<Branch[]>({
+  const { data: branches = [], isLoading: branchesLoading } = useQuery<Branch[]>({
     queryKey: ["/api/branches"],
+  });
+  const { data: allSubjects = [], isLoading: subjectsLoading } = useQuery<Subject[]>({
+    queryKey: ["/api/subjects"],
   });
 
   useEffect(() => {
@@ -333,6 +338,18 @@ export default function ProfileScreen() {
   }
 
   const selectedBranch = branches.find((b) => b.id === branchId);
+  const savedSubjects = useMemo(
+    () => allSubjects.filter((subject) => bookmarks.includes(subject.id)),
+    [allSubjects, bookmarks],
+  );
+
+  const openSavedSubject = (subjectId: string) => {
+    router.push({ pathname: "/subject/[id]", params: { id: subjectId } });
+  };
+
+  const removeSavedSubject = (subjectId: string) => {
+    toggleBookmark(subjectId);
+  };
 
   return (
     <ScrollView
@@ -361,24 +378,31 @@ export default function ProfileScreen() {
 
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Select Your Branch</Text>
-            <View style={styles.grid}>
-              {branches.map((b) => (
-                <Pressable
-                  key={b.id}
-                  onPress={() => setBranchId(b.id)}
-                  style={[styles.cardItem, branchId === b.id && styles.cardItemActive]}
-                >
-                  <View style={[styles.cardIcon, branchId === b.id && styles.cardIconActive]}>
-                    <Text style={[styles.cardIconText, branchId === b.id && styles.cardIconTextActive]}>
-                      {b.shortName}
+            {branchesLoading ? (
+              <View style={styles.inlineLoadingCard}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={styles.inlineLoadingText}>Loading branches...</Text>
+              </View>
+            ) : (
+              <View style={styles.grid}>
+                {branches.map((b) => (
+                  <Pressable
+                    key={b.id}
+                    onPress={() => setBranchId(b.id)}
+                    style={[styles.cardItem, branchId === b.id && styles.cardItemActive]}
+                  >
+                    <View style={[styles.cardIcon, branchId === b.id && styles.cardIconActive]}>
+                      <Text style={[styles.cardIconText, branchId === b.id && styles.cardIconTextActive]}>
+                        {b.shortName}
+                      </Text>
+                    </View>
+                    <Text style={[styles.cardText, branchId === b.id && styles.cardTextActive]}>
+                      {b.name}
                     </Text>
-                  </View>
-                  <Text style={[styles.cardText, branchId === b.id && styles.cardTextActive]}>
-                    {b.name}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
+                  </Pressable>
+                ))}
+              </View>
+            )}
 
             <Text style={styles.sectionTitle}>Select Your Year</Text>
             <View style={styles.semesterRow}>
@@ -496,6 +520,54 @@ export default function ProfileScreen() {
               <Feather name="trash-2" size={16} color="white" />
               <Text style={styles.primaryBtnText}>{deleting ? "Deleting..." : "Delete Profile"}</Text>
             </Pressable>
+          </View>
+
+          <View style={styles.savedCard}>
+            <View style={styles.downloadsHeader}>
+              <View>
+                <Text style={styles.sectionTitle}>Saved Subjects</Text>
+                <Text style={styles.subText}>Quick access to subjects you bookmarked</Text>
+              </View>
+            </View>
+
+            {bookmarksLoading || subjectsLoading || branchesLoading ? (
+              <View style={styles.downloadsEmpty}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : savedSubjects.length ? (
+              savedSubjects.map((subject) => {
+                const subjectBranch = branches.find((branch) => branch.id === subject.branchId);
+                return (
+                  <View key={subject.id} style={styles.downloadItem}>
+                    <Pressable style={styles.downloadInfo} onPress={() => openSavedSubject(subject.id)}>
+                      <View style={styles.downloadIconBox}>
+                        <Feather name="bookmark" size={18} color={colors.primary} />
+                      </View>
+                      <View style={styles.downloadTextWrap}>
+                        <Text style={styles.downloadTitle} numberOfLines={1}>
+                          {subject.name}
+                        </Text>
+                        <Text style={styles.downloadMeta} numberOfLines={1}>
+                          {subject.code} • {subjectBranch?.shortName || subject.branchId.toUpperCase()} • Sem {subject.semester}
+                        </Text>
+                      </View>
+                    </Pressable>
+                    <View style={styles.downloadActions}>
+                      <Pressable onPress={() => openSavedSubject(subject.id)} hitSlop={8}>
+                        <Feather name="eye" size={18} color={colors.primary} />
+                      </Pressable>
+                      <Pressable onPress={() => removeSavedSubject(subject.id)} hitSlop={8}>
+                        <Feather name="bookmark" size={18} color={colors.danger} />
+                      </Pressable>
+                    </View>
+                  </View>
+                );
+              })
+            ) : (
+              <View style={styles.downloadsEmpty}>
+                <Text style={styles.subText}>No saved subjects yet.</Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.downloadsCard}>
@@ -644,6 +716,23 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
       flexDirection: "row",
       flexWrap: "wrap",
       gap: 12,
+    },
+    inlineLoadingCard: {
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.background,
+      borderRadius: 12,
+      paddingVertical: 18,
+      paddingHorizontal: 14,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 10,
+    },
+    inlineLoadingText: {
+      fontFamily: "Inter_500Medium",
+      fontSize: 13,
+      color: colors.textSecondary,
     },
     cardItem: {
       flexBasis: "48%",
@@ -805,6 +894,15 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
     actionButtons: {
       gap: 10,
       marginTop: 10,
+    },
+    savedCard: {
+      backgroundColor: colors.card,
+      borderColor: colors.cardBorder,
+      borderWidth: 1,
+      borderRadius: 16,
+      padding: 16,
+      gap: 14,
+      marginTop: 20,
     },
     downloadsCard: {
       backgroundColor: colors.card,

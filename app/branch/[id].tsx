@@ -118,6 +118,7 @@ export default function BranchScreen() {
     return (
       <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
         <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading branch details...</Text>
       </View>
     );
   }
@@ -201,7 +202,10 @@ export default function BranchScreen() {
         showsVerticalScrollIndicator={false}
       >
         {subjectsLoading ? (
-          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
+          <View style={styles.loadingState}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.loadingText}>Loading subjects for this branch...</Text>
+          </View>
         ) : filteredSubjects.length > 0 ? (
           <View style={styles.subjectList}>
             {filteredSubjects.map(subject => (
@@ -352,6 +356,17 @@ const baseStyles = {
     paddingTop: 80,
     gap: 10,
   },
+  loadingState: {
+    alignItems: "center",
+    paddingTop: 60,
+    gap: 12,
+  },
+  loadingText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 14,
+    textAlign: "center",
+    marginTop: 12,
+  },
   emptyTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 16,
@@ -387,6 +402,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
     semPillTextActive: { ...baseStyles.semPillTextActive, color: colors.primary },
     subjectCard: { ...baseStyles.subjectCard, backgroundColor: colors.card, borderColor: colors.cardBorder },
     subjectName: { ...baseStyles.subjectName, color: colors.text },
+    loadingText: { ...baseStyles.loadingText, color: colors.textSecondary },
     emptyTitle: { ...baseStyles.emptyTitle, color: colors.textSecondary },
     emptySubtext: { ...baseStyles.emptySubtext, color: colors.textMuted },
     errorText: { ...baseStyles.errorText, color: colors.danger },

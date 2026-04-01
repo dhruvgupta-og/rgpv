@@ -55,11 +55,11 @@ export default function SearchScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const { data: allSubjects = [], isLoading } = useQuery<Subject[]>({
+  const { data: allSubjects = [], isLoading: subjectsLoading } = useQuery<Subject[]>({
     queryKey: ["/api/subjects"],
   });
 
-  const { data: branches = [] } = useQuery<Branch[]>({
+  const { data: branches = [], isLoading: branchesLoading } = useQuery<Branch[]>({
     queryKey: ["/api/branches"],
   });
 
@@ -101,8 +101,13 @@ export default function SearchScreen() {
         </View>
       </View>
 
-      {isLoading ? (
-        <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
+      {subjectsLoading || branchesLoading ? (
+        <View style={styles.loadingState}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>
+            {branchesLoading ? "Loading branches and subjects..." : "Loading subjects..."}
+          </Text>
+        </View>
       ) : query.trim() ? (
         <FlatList
           data={results}
@@ -218,6 +223,16 @@ const baseStyles = {
     paddingTop: 60,
     gap: 10,
   },
+  loadingState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 60,
+    gap: 12,
+  },
+  loadingText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 14,
+  },
   emptyText: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 16,
@@ -252,5 +267,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
     emptyText: { ...baseStyles.emptyText, color: colors.textSecondary },
     emptySubtext: { ...baseStyles.emptySubtext, color: colors.textMuted },
     popularTitle: { ...baseStyles.popularTitle, color: colors.text },
+    loadingText: { ...baseStyles.loadingText, color: colors.textSecondary },
   });
 }
