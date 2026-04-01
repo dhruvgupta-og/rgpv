@@ -1,7 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system";
-import * as Sharing from "expo-sharing";
-import { Linking, Platform } from "react-native";
+import { Platform } from "react-native";
 
 const DOWNLOADS_KEY = "rgpv_downloads";
 const DOWNLOADS_DIR = FileSystem.documentDirectory + "papers/";
@@ -15,6 +14,7 @@ export type DownloadItem = {
   examType: string;
   remoteUrl: string;
   localUri: string;
+  storageType?: "local" | "remote";
   createdAt: string;
 };
 
@@ -29,7 +29,25 @@ export async function getDownloads(): Promise<DownloadItem[]> {
   const raw = await AsyncStorage.getItem(DOWNLOADS_KEY);
   if (!raw) return [];
   try {
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw) as DownloadItem[];
+    const validItems: DownloadItem[] = [];
+
+    for (const item of parsed) {
+      if (item.storageType === "remote") {
+        validItems.push(item);
+        continue;
+      }
+      const info = await FileSystem.getInfoAsync(item.localUri);
+      if (info.exists) {
+        validItems.push(item);
+      }
+    }
+
+    if (validItems.length !== parsed.length) {
+      await saveDownloads(validItems);
+    }
+
+    return validItems;
   } catch {
     return [];
   }
@@ -43,18 +61,36 @@ export async function isDownloaded(id: string): Promise<DownloadItem | null> {
   const items = await getDownloads();
   const item = items.find((d) => d.id === id);
   if (!item) return null;
+  if (item.storageType === "remote") return item;
   const info = await FileSystem.getInfoAsync(item.localUri);
   if (!info.exists) return null;
   return item;
 }
 
 export async function downloadPaper(item: Omit<DownloadItem, "localUri" | "createdAt">) {
+  const downloads = await getDownloads();
+
+  if (Platform.OS === "web") {
+    const next: DownloadItem = {
+      ...item,
+      localUri: item.remoteUrl,
+      storageType: "remote",
+      createdAt: new Date().toISOString(),
+    };
+    await saveDownloads([next, ...downloads.filter((d) => d.id !== item.id)]);
+    return next;
+  }
+
   await ensureDir();
   const fileName = `${item.id}-${item.year}-${item.month}.pdf`;
   const localUri = DOWNLOADS_DIR + fileName;
   const result = await FileSystem.downloadAsync(item.remoteUrl, localUri);
-  const downloads = await getDownloads();
-  const next: DownloadItem = { ...item, localUri: result.uri, createdAt: new Date().toISOString() };
+  const next: DownloadItem = {
+    ...item,
+    localUri: result.uri,
+    storageType: "local",
+    createdAt: new Date().toISOString(),
+  };
   await saveDownloads([next, ...downloads.filter((d) => d.id !== item.id)]);
   return next;
 }
@@ -62,26 +98,9 @@ export async function downloadPaper(item: Omit<DownloadItem, "localUri" | "creat
 export async function removeDownload(id: string) {
   const downloads = await getDownloads();
   const target = downloads.find((d) => d.id === id);
-  if (target) {
+  if (target && target.storageType !== "remote") {
     const info = await FileSystem.getInfoAsync(target.localUri);
     if (info.exists) await FileSystem.deleteAsync(target.localUri, { idempotent: true });
   }
   await saveDownloads(downloads.filter((d) => d.id !== id));
-}
-
-export async function openDownload(item: DownloadItem) {
-  if (Platform.OS === "android") {
-    const contentUri = await FileSystem.getContentUriAsync(item.localUri);
-    await Linking.openURL(contentUri);
-  } else {
-    await Linking.openURL(item.localUri);
-  }
-}
-
-export async function shareDownload(item: DownloadItem) {
-  if (await Sharing.isAvailableAsync()) {
-    await Sharing.shareAsync(item.localUri);
-  } else {
-    await Linking.openURL(item.localUri);
-  }
 }

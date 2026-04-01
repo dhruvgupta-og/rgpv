@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, ScrollView, Pressable, Platform, Alert, ActivityIndicator, Linking } from "react-native";
+import { StyleSheet, Text, View, ScrollView, Pressable, Platform, Alert, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
@@ -11,7 +11,7 @@ import { useBookmarks } from "@/lib/bookmarks";
 import { getApiUrl, apiRequest } from "@/lib/query-client";
 import { getViewerUrl } from "@/lib/pdf-viewer";
 import { useTheme } from "@/lib/theme";
-import { downloadPaper, isDownloaded, openDownload, shareDownload, type DownloadItem } from "@/lib/downloads";
+import { downloadPaper, isDownloaded, type DownloadItem } from "@/lib/downloads";
 import { ensureProfileComplete } from "@/lib/profile-guard";
 
 type TabType = "syllabus" | "papers" | "videos" | "analyzer";
@@ -56,6 +56,7 @@ function PaperCard({ paper, index, subjectName }: { paper: Paper; index: number;
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const isMain = paper.examType === "Main";
+  const hasPdf = !!paper.pdfPath;
   const [downloaded, setDownloaded] = useState<DownloadItem | null>(null);
   const [downloading, setDownloading] = useState(false);
 
@@ -68,6 +69,13 @@ function PaperCard({ paper, index, subjectName }: { paper: Paper; index: number;
     apiRequest("POST", `/api/papers/${paper.id}/view`).catch(() => {});
   };
 
+  const getPdfUrl = () => {
+    if (!paper.pdfPath) return "";
+    return paper.pdfPath.startsWith("http")
+      ? paper.pdfPath
+      : getApiUrl() + paper.pdfPath.replace(/^\//, "");
+  };
+
   const handlePress = async () => {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -75,14 +83,23 @@ function PaperCard({ paper, index, subjectName }: { paper: Paper; index: number;
     const ok = await ensureProfileComplete(() => router.replace("/profile"));
     if (!ok) return;
     if (downloaded) {
-      await openDownload(downloaded);
+      router.push({
+        pathname: "/pdf-viewer",
+        params: {
+          url: encodeURIComponent(
+            downloaded.storageType === "remote"
+              ? getViewerUrl(downloaded.remoteUrl)
+              : downloaded.localUri
+          ),
+          title: encodeURIComponent(`${downloaded.title} • ${downloaded.month} ${downloaded.year}`),
+          local: downloaded.storageType === "remote" ? "0" : "1",
+        },
+      });
       markView();
       return;
     }
     if (paper.pdfPath) {
-      const pdfUrl = paper.pdfPath.startsWith("http")
-        ? paper.pdfPath
-        : getApiUrl() + paper.pdfPath.replace(/^\//, "");
+      const pdfUrl = getPdfUrl();
       router.push({ pathname: "/pdf-viewer", params: { url: encodeURIComponent(getViewerUrl(pdfUrl)) } });
       markView();
     } else {
@@ -100,9 +117,7 @@ function PaperCard({ paper, index, subjectName }: { paper: Paper; index: number;
     if (!ok) return;
     setDownloading(true);
     try {
-      const pdfUrl = paper.pdfPath.startsWith("http")
-        ? paper.pdfPath
-        : getApiUrl() + paper.pdfPath.replace(/^\//, '');
+      const pdfUrl = getPdfUrl();
       const item = await downloadPaper({
         id: String(paper.id),
         subjectId: paper.subjectId,
@@ -117,6 +132,19 @@ function PaperCard({ paper, index, subjectName }: { paper: Paper; index: number;
       setDownloading(false);
     }
   };
+
+  const handleDownloadButton = async () => {
+    if (!hasPdf) return;
+    await handleDownload();
+  };
+
+  const actionLabel = !hasPdf
+    ? "Uploading Soon"
+    : downloaded
+      ? "Downloaded"
+      : downloading
+        ? "Downloading..."
+        : "Download PDF";
 
   return (
     <Animated.View entering={FadeInDown.delay(index * 60).duration(400)}>
@@ -136,25 +164,46 @@ function PaperCard({ paper, index, subjectName }: { paper: Paper; index: number;
             <View style={[styles.typeBadge, { backgroundColor: isMain ? colors.accent + '20' : colors.warning + '20' }]}>
               <Text style={[styles.typeText, { color: isMain ? colors.accent : colors.warning }]}>{paper.examType}</Text>
             </View>
-            {paper.pdfPath ? (
+            {hasPdf ? (
               <View style={[styles.typeBadge, { backgroundColor: colors.accent + '20' }]}>
                 <Text style={[styles.typeText, { color: colors.accent }]}>{downloaded ? "Saved" : "PDF"}</Text>
               </View>
-            ) : null}
+            ) : (
+              <View style={[styles.typeBadge, { backgroundColor: colors.warning + '20' }]}>
+                <Text style={[styles.typeText, { color: colors.warning }]}>Soon</Text>
+              </View>
+            )}
           </View>
         </View>
         <View style={styles.paperActions}>
-          {Platform.OS === "android" && paper.pdfPath ? (
-            <Pressable onPress={handleDownload} hitSlop={8} disabled={downloading}>
-              <Feather name={downloaded ? "check-circle" : "download"} size={18} color={downloaded ? colors.success : colors.primary} />
-            </Pressable>
-          ) : null}
-          {downloaded ? (
-            <Pressable onPress={() => shareDownload(downloaded)} hitSlop={8}>
-              <Feather name="share-2" size={18} color={colors.textMuted} />
-            </Pressable>
-          ) : null}
-          <Feather name={paper.pdfPath ? "external-link" : "clock"} size={18} color={paper.pdfPath ? colors.textMuted : colors.textMuted} />
+          <Pressable
+            onPress={(event) => {
+              event.stopPropagation?.();
+              handleDownloadButton();
+            }}
+            disabled={!hasPdf || downloading}
+            style={[
+              styles.paperActionBtn,
+              !hasPdf && styles.paperActionBtnDisabled,
+              downloaded && styles.paperActionBtnSuccess,
+            ]}
+          >
+            <Feather
+              name={!hasPdf ? "clock" : downloaded ? "check-circle" : Platform.OS === "web" ? "eye" : "download"}
+              size={14}
+              color={!hasPdf ? colors.textMuted : downloaded ? colors.success : colors.primary}
+            />
+            <Text
+              style={[
+                styles.paperActionBtnText,
+                !hasPdf && styles.paperActionBtnTextDisabled,
+                downloaded && styles.paperActionBtnTextSuccess,
+              ]}
+            >
+              {actionLabel}
+            </Text>
+          </Pressable>
+          <Feather name={hasPdf ? "eye" : "clock"} size={18} color={colors.textMuted} />
         </View>
       </Pressable>
     </Animated.View>
@@ -713,6 +762,25 @@ const baseStyles = {
     alignItems: "center",
     gap: 10,
   },
+  paperActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderWidth: 1,
+  },
+  paperActionBtnDisabled: {
+    opacity: 0.75,
+  },
+  paperActionBtnSuccess: {},
+  paperActionBtnText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
+  },
+  paperActionBtnTextDisabled: {},
+  paperActionBtnTextSuccess: {},
   paperTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 15,
@@ -828,6 +896,12 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
     topicDot: { ...baseStyles.topicDot, backgroundColor: colors.primary },
     topicText: { ...baseStyles.topicText, color: colors.textSecondary },
     paperCard: { ...baseStyles.paperCard, backgroundColor: colors.card, borderColor: colors.cardBorder },
+    paperActionBtn: { ...baseStyles.paperActionBtn, borderColor: colors.primary + "35", backgroundColor: colors.primary + "10" },
+    paperActionBtnDisabled: { ...baseStyles.paperActionBtnDisabled, borderColor: colors.cardBorder, backgroundColor: colors.background },
+    paperActionBtnSuccess: { ...baseStyles.paperActionBtnSuccess, borderColor: colors.success + "35", backgroundColor: colors.success + "12" },
+    paperActionBtnText: { ...baseStyles.paperActionBtnText, color: colors.primary },
+    paperActionBtnTextDisabled: { ...baseStyles.paperActionBtnTextDisabled, color: colors.textMuted },
+    paperActionBtnTextSuccess: { ...baseStyles.paperActionBtnTextSuccess, color: colors.success },
     videoCard: { ...baseStyles.videoCard, backgroundColor: colors.card, borderColor: colors.cardBorder },
     videoIcon: { ...baseStyles.videoIcon, backgroundColor: colors.primary + "18" },
     videoTitle: { ...baseStyles.videoTitle, color: colors.text },

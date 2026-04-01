@@ -8,7 +8,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { ensureProfileComplete } from "@/lib/profile-guard";
 
 export default function PdfViewerScreen() {
-  const { url } = useLocalSearchParams<{ url?: string }>();
+  const { url, title, local } = useLocalSearchParams<{ url?: string; title?: string; local?: string }>();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -16,6 +16,8 @@ export default function PdfViewerScreen() {
   const [hasAccess, setHasAccess] = useState(false);
 
   const decodedUrl = url ? decodeURIComponent(url) : "";
+  const decodedTitle = title ? decodeURIComponent(title) : "PDF Viewer";
+  const isLocalFile = local === "1";
   useEffect(() => {
     let active = true;
 
@@ -43,7 +45,7 @@ export default function PdfViewerScreen() {
           <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={22} color={colors.text} />
           </Pressable>
-          <Text style={styles.topBarTitle}>PDF Viewer</Text>
+          <Text style={styles.topBarTitle}>{decodedTitle}</Text>
           <View style={{ width: 36 }} />
         </View>
         <View style={styles.empty}>
@@ -63,14 +65,20 @@ export default function PdfViewerScreen() {
         <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color={colors.text} />
         </Pressable>
-        <Text style={styles.topBarTitle}>PDF Viewer</Text>
+        <Text style={styles.topBarTitle}>{decodedTitle}</Text>
         <View style={{ width: 36 }} />
       </View>
       {decodedUrl ? (
         Platform.OS === "web" ? (
           <iframe src={decodedUrl} style={styles.iframe as any} />
         ) : (
-          <WebView source={{ uri: decodedUrl }} style={styles.webview} />
+          <WebView
+            source={{ uri: decodedUrl }}
+            style={styles.webview}
+            allowFileAccess={isLocalFile}
+            allowingReadAccessToURL={isLocalFile ? decodedUrl : undefined}
+            originWhitelist={["*"]}
+          />
         )
       ) : (
         <View style={styles.empty}>

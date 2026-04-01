@@ -20,6 +20,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as ScreenCapture from "expo-screen-capture";
 import * as AuthSession from "expo-auth-session";
 import Constants from "expo-constants";
+import { getStoredProfile, isStoredProfileComplete } from "@/lib/profile-storage";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -96,23 +97,44 @@ function AuthGate() {
       return;
     }
     setProfileReady(false);
-    const ref = db.collection("profiles").doc(user.uid);
-    const unsubscribe = ref.onSnapshot(
-      (snap) => {
-        const data = snap.exists ? (snap.data() as any) : {};
-        const isComplete = !!data?.name && !!data?.branchId && !!data?.year && !!data?.collegeName && !!data?.email;
-        setProfileComplete(isComplete);
-        setProfileReady(true);
-        if (!isComplete) {
-          router.replace("/profile");
-        }
-      },
-      () => {
-        setProfileComplete(false);
-        setProfileReady(true);
-      },
-    );
-    return () => unsubscribe();
+    let active = true;
+    let unsubscribe = () => {};
+
+    const syncProfileState = async (remoteData?: any) => {
+      const localProfile = await getStoredProfile();
+      const localComplete = isStoredProfileComplete(localProfile);
+      const remoteComplete = !!remoteData?.name && !!remoteData?.branchId && !!remoteData?.year && !!remoteData?.collegeName && !!remoteData?.email;
+      const isComplete = remoteComplete || localComplete;
+
+      if (!active) return;
+
+      setProfileComplete(isComplete);
+      setProfileReady(true);
+
+      if (!isComplete) {
+        router.replace("/profile");
+      }
+    };
+
+    (async () => {
+      await syncProfileState();
+
+      const ref = db.collection("profiles").doc(user.uid);
+      unsubscribe = ref.onSnapshot(
+        (snap) => {
+          const data = snap.exists ? (snap.data() as any) : {};
+          syncProfileState(data);
+        },
+        () => {
+          syncProfileState();
+        },
+      );
+    })();
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [user, router]);
 
   React.useEffect(() => {

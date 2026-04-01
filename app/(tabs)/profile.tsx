@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useFocusEffect, router } from "expo-router";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View, ActivityIndicator, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/lib/theme";
@@ -8,6 +9,7 @@ import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { auth, db, firebase } from "@/lib/firebase-client";
 import { apiRequest } from "@/lib/query-client";
+import { getViewerUrl } from "@/lib/pdf-viewer";
 import {
   clearStoredProfile,
   getOrCreateProfileDeviceId,
@@ -16,6 +18,7 @@ import {
   saveStoredProfile,
   type StoredProfile,
 } from "@/lib/profile-storage";
+import { getDownloads, removeDownload, type DownloadItem } from "@/lib/downloads";
 
 const years = [
   { value: "1", label: "1st Year" },
@@ -40,6 +43,8 @@ export default function ProfileScreen() {
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(true);
+  const [downloads, setDownloads] = useState<DownloadItem[]>([]);
+  const [loadingDownloads, setLoadingDownloads] = useState(true);
 
   const { data: branches = [] } = useQuery<Branch[]>({
     queryKey: ["/api/branches"],
@@ -100,6 +105,22 @@ export default function ProfileScreen() {
     };
   }, []);
 
+  const loadDownloads = useCallback(async () => {
+    setLoadingDownloads(true);
+    try {
+      const items = await getDownloads();
+      setDownloads(items);
+    } finally {
+      setLoadingDownloads(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadDownloads();
+    }, [loadDownloads]),
+  );
+
   const handleSave = async () => {
     const deviceId = await getOrCreateProfileDeviceId();
     const normalizedEmail = email.trim() || auth.currentUser?.email || "";
@@ -120,33 +141,53 @@ export default function ProfileScreen() {
     setSaving(true);
 
     try {
-      const user = auth.currentUser;
-      await apiRequest("POST", "/api/profile", {
-        ...profile,
-        email: normalizedEmail,
-        firebaseUid: user?.uid || null,
-      });
       await saveStoredProfile(profile);
 
+      const user = auth.currentUser;
+      let syncedEverywhere = true;
+
+      try {
+        await apiRequest("POST", "/api/profile", {
+          ...profile,
+          email: normalizedEmail,
+          firebaseUid: user?.uid || null,
+        });
+      } catch (syncError) {
+        syncedEverywhere = false;
+        console.warn("Profile API sync failed", syncError);
+      }
+
       if (user) {
-        await db.collection("profiles").doc(user.uid).set(
-          {
-            ...profile,
-            email: normalizedEmail,
-            firebaseUid: user.uid,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        );
+        try {
+          await db.collection("profiles").doc(user.uid).set(
+            {
+              ...profile,
+              email: normalizedEmail,
+              firebaseUid: user.uid,
+              createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+          );
+        } catch (syncError) {
+          syncedEverywhere = false;
+          console.warn("Profile Firestore sync failed", syncError);
+        }
       }
 
       setName(profile.name);
+      setBranchId(profile.branchId);
+      setYear(profile.year);
       setCollegeName(profile.collegeName);
       setEmail(profile.email);
       setLastSavedAt(new Date().toLocaleString());
       setShowForm(false);
-      Alert.alert("Success", "Profile saved successfully!");
+      Alert.alert(
+        "Profile saved",
+        syncedEverywhere
+          ? "Profile saved successfully!"
+          : "Profile saved on this device. Server sync will update when the connection works.",
+      );
     } catch (e: any) {
       Alert.alert("Save failed", e.message);
     } finally {
@@ -242,6 +283,42 @@ export default function ProfileScreen() {
         style: "destructive",
         onPress: () => {
           performDeleteProfile();
+        },
+      },
+    ]);
+  };
+
+  const openDownloadedPaper = (item: DownloadItem) => {
+    router.push({
+      pathname: "/pdf-viewer",
+      params: {
+        url: encodeURIComponent(item.storageType === "remote" ? getViewerUrl(item.remoteUrl) : item.localUri),
+        title: encodeURIComponent(`${item.title} • ${item.month} ${item.year}`),
+        local: item.storageType === "remote" ? "0" : "1",
+      },
+    });
+  };
+
+  const handleRemoveDownload = (item: DownloadItem) => {
+    const runDelete = async () => {
+      await removeDownload(item.id);
+      await loadDownloads();
+    };
+
+    if (Platform.OS === "web") {
+      const confirmed = globalThis.confirm?.(`Remove "${item.title} • ${item.month} ${item.year}" from My Downloads?`) ?? true;
+      if (!confirmed) return;
+      runDelete().catch(() => Alert.alert("Remove failed", "Could not remove this download."));
+      return;
+    }
+
+    Alert.alert("Remove Download", `Remove "${item.title} • ${item.month} ${item.year}" from My Downloads?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: () => {
+          runDelete().catch(() => Alert.alert("Remove failed", "Could not remove this download."));
         },
       },
     ]);
@@ -419,6 +496,55 @@ export default function ProfileScreen() {
               <Feather name="trash-2" size={16} color="white" />
               <Text style={styles.primaryBtnText}>{deleting ? "Deleting..." : "Delete Profile"}</Text>
             </Pressable>
+          </View>
+
+          <View style={styles.downloadsCard}>
+            <View style={styles.downloadsHeader}>
+              <View>
+                <Text style={styles.sectionTitle}>My Downloads</Text>
+                <Text style={styles.subText}>Open your saved papers inside the app</Text>
+              </View>
+              <Pressable onPress={loadDownloads} style={styles.refreshChip}>
+                <Feather name="refresh-cw" size={14} color={colors.primary} />
+                <Text style={styles.refreshChipText}>Refresh</Text>
+              </Pressable>
+            </View>
+
+            {loadingDownloads ? (
+              <View style={styles.downloadsEmpty}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : downloads.length ? (
+              downloads.map((item) => (
+                <View key={item.id} style={styles.downloadItem}>
+                  <Pressable style={styles.downloadInfo} onPress={() => openDownloadedPaper(item)}>
+                    <View style={styles.downloadIconBox}>
+                      <Feather name="file-text" size={18} color={colors.primary} />
+                    </View>
+                    <View style={styles.downloadTextWrap}>
+                      <Text style={styles.downloadTitle} numberOfLines={1}>
+                        {item.title}
+                      </Text>
+                      <Text style={styles.downloadMeta} numberOfLines={1}>
+                        {item.month} {item.year} • {item.examType}
+                      </Text>
+                    </View>
+                  </Pressable>
+                  <View style={styles.downloadActions}>
+                    <Pressable onPress={() => openDownloadedPaper(item)} hitSlop={8}>
+                      <Feather name="eye" size={18} color={colors.primary} />
+                    </Pressable>
+                    <Pressable onPress={() => handleRemoveDownload(item)} hitSlop={8}>
+                      <Feather name="trash-2" size={18} color={colors.danger} />
+                    </Pressable>
+                  </View>
+                </View>
+              ))
+            ) : (
+              <View style={styles.downloadsEmpty}>
+                <Text style={styles.subText}>No downloaded papers yet.</Text>
+              </View>
+            )}
           </View>
         </>
       )}
@@ -679,6 +805,84 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
     actionButtons: {
       gap: 10,
       marginTop: 10,
+    },
+    downloadsCard: {
+      backgroundColor: colors.card,
+      borderColor: colors.cardBorder,
+      borderWidth: 1,
+      borderRadius: 16,
+      padding: 16,
+      gap: 14,
+      marginTop: 20,
+    },
+    downloadsHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+    refreshChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      borderWidth: 1,
+      borderColor: colors.primary + "40",
+      backgroundColor: colors.primary + "14",
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    refreshChipText: {
+      fontFamily: "Inter_600SemiBold",
+      fontSize: 12,
+      color: colors.primary,
+    },
+    downloadsEmpty: {
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 18,
+    },
+    downloadItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+      paddingVertical: 10,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+    },
+    downloadInfo: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    downloadIconBox: {
+      width: 38,
+      height: 38,
+      borderRadius: 10,
+      backgroundColor: colors.primary + "12",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    downloadTextWrap: {
+      flex: 1,
+      gap: 2,
+    },
+    downloadTitle: {
+      fontFamily: "Inter_600SemiBold",
+      fontSize: 14,
+      color: colors.text,
+    },
+    downloadMeta: {
+      fontFamily: "Inter_400Regular",
+      fontSize: 12,
+      color: colors.textSecondary,
+    },
+    downloadActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
     },
   });
 }
