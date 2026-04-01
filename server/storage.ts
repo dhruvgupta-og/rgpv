@@ -390,9 +390,34 @@ export const storage = {
 
   async getProfiles() {
     const snap = await db.collection("profiles").get();
-    return snap.docs
-      .map((d) => d.data())
-      .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
+    const profiles = snap.docs.map((d) => d.data());
+    const deduped = new Map<string, any>();
+
+    for (const profile of profiles) {
+      const key =
+        String(profile.firebaseUid || "").trim() ||
+        String(profile.deviceId || "").trim() ||
+        `${String(profile.name || "").trim().toLowerCase()}|${String(profile.branchId || "").trim()}|${String(profile.year || "").trim()}`;
+
+      const current = deduped.get(key);
+      if (!current) {
+        deduped.set(key, profile);
+        continue;
+      }
+
+      const currentHasPhone = !!(current.phoneNumber || current.phone || current.mobile);
+      const nextHasPhone = !!(profile.phoneNumber || profile.phone || profile.mobile);
+      const currentTime = String(current.updatedAt || current.createdAt || "");
+      const nextTime = String(profile.updatedAt || profile.createdAt || "");
+
+      if ((!currentHasPhone && nextHasPhone) || nextTime > currentTime) {
+        deduped.set(key, profile);
+      }
+    }
+
+    return Array.from(deduped.values()).sort((a, b) =>
+      String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")),
+    );
   },
 
   async getProfileByDeviceId(deviceId: string) {

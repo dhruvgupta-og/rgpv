@@ -1354,9 +1354,10 @@
           const time = (p.updatedAt || p.createdAt) ? new Date(p.updatedAt || p.createdAt).toLocaleString() : '';
           const branch = allBranches.find(b => b.id === p.branchId);
           const branchLabel = branch ? `${branch.shortName} - ${branch.name}` : (p.branchId || '-');
+          const phone = p.phoneNumber || p.phone || p.mobile || '-';
           return `<tr>
             <td><strong>${p.name}</strong></td>
-            <td>${p.phoneNumber || '-'}</td>
+            <td>${phone}</td>
             <td>${branchLabel}</td>
             <td>${p.year}</td>
             <td>${p.collegeName}</td>
