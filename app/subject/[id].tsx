@@ -128,6 +128,9 @@ function PaperCard({ paper, index, subjectName }: { paper: Paper; index: number;
         remoteUrl: pdfUrl,
       });
       setDownloaded(item);
+      Alert.alert("Downloaded", `${subjectName} ${paper.month} ${paper.year} is now available in My Downloads.`);
+    } catch (e: any) {
+      Alert.alert("Download failed", e?.message || "Could not save this PDF right now.");
     } finally {
       setDownloading(false);
     }
