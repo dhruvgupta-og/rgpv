@@ -19,7 +19,7 @@ export async function ensureProfileComplete(onIncomplete?: () => void) {
   const data = snap.exists ? (snap.data() as any) : {};
   const ok = isStoredProfileComplete(data);
   if (!ok) {
-    Alert.alert("Complete profile", "Please fill and save your profile to access content.");
+    Alert.alert("Complete profile", "Please fill and save your profile with email to access content.");
     onIncomplete?.();
     return false;
   }

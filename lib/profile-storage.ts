@@ -8,12 +8,12 @@ export interface StoredProfile {
   branchId: string;
   year: string;
   collegeName: string;
-  phoneNumber: string;
+  email: string;
   deviceId?: string;
 }
 
 export function isStoredProfileComplete(profile: Partial<StoredProfile> | null | undefined) {
-  return !!profile?.name && !!profile?.branchId && !!profile?.year && !!profile?.collegeName && !!profile?.phoneNumber;
+  return !!profile?.name && !!profile?.branchId && !!profile?.year && !!profile?.collegeName && !!profile?.email;
 }
 
 export async function getStoredProfile() {

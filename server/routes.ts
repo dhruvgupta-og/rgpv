@@ -95,10 +95,6 @@ function formatProfileDateTime(value: unknown) {
   return date.toLocaleString("en-IN");
 }
 
-function getProfilePhone(profile: Record<string, any>) {
-  return profile.phoneNumber || profile.phone || profile.mobile || "";
-}
-
 function normalizeBranchId(raw?: string) {
   return (raw || "").trim().toLowerCase();
 }
@@ -318,8 +314,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ---- PROFILES ----
   app.post("/api/profile", async (req: Request, res: Response) => {
     try {
-      const { deviceId, name, branchId, year, collegeName, phoneNumber, email, firebaseUid } = req.body || {};
-      if (!deviceId || !name || !branchId || !year || !collegeName || !phoneNumber) {
+      const { deviceId, name, branchId, year, collegeName, email, firebaseUid } = req.body || {};
+      if (!deviceId || !name || !branchId || !year || !collegeName || !email) {
         return res.status(400).json({ error: "All fields are required" });
       }
       const profile = await storage.upsertProfile({
@@ -328,7 +324,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         branchId,
         year,
         collegeName,
-        phoneNumber,
         email: email || null,
         firebaseUid: firebaseUid || null,
       });
@@ -371,11 +366,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const branchMap = new Map(branches.map((branch: any) => [branch.id, `${branch.shortName} - ${branch.name}`]));
       const header = [
         "Name",
-        "Phone Number",
+        "Email",
         "Branch",
         "Year",
         "College",
-        "Email",
         "Device ID",
         "Firebase UID",
         "Saved At",
@@ -383,11 +377,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ];
       const rows = data.map((profile: any) => [
         profile.name,
-        getProfilePhone(profile),
+        profile.email,
         branchMap.get(profile.branchId) || profile.branchId,
         profile.year,
         profile.collegeName,
-        profile.email,
         profile.deviceId,
         profile.firebaseUid,
         formatProfileTime(profile),
@@ -409,11 +402,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const branchMap = new Map(branches.map((branch: any) => [branch.id, `${branch.shortName} - ${branch.name}`]));
       const header = [
         "Name",
-        "Phone Number",
+        "Email",
         "Branch",
         "Year",
         "College",
-        "Email",
         "Device ID",
         "Firebase UID",
         "Saved At",
@@ -422,11 +414,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const rows = data.map((profile: any) => [
         profile.name,
-        getProfilePhone(profile),
+        profile.email,
         branchMap.get(profile.branchId) || profile.branchId,
         profile.year,
         profile.collegeName,
-        profile.email,
         profile.deviceId,
         profile.firebaseUid,
         formatProfileDateTime(formatProfileTime(profile)),

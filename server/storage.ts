@@ -405,12 +405,12 @@ export const storage = {
         continue;
       }
 
-      const currentHasPhone = !!(current.phoneNumber || current.phone || current.mobile);
-      const nextHasPhone = !!(profile.phoneNumber || profile.phone || profile.mobile);
+      const currentHasEmail = !!String(current.email || "").trim();
+      const nextHasEmail = !!String(profile.email || "").trim();
       const currentTime = String(current.updatedAt || current.createdAt || "");
       const nextTime = String(profile.updatedAt || profile.createdAt || "");
 
-      if ((!currentHasPhone && nextHasPhone) || nextTime > currentTime) {
+      if ((!currentHasEmail && nextHasEmail) || nextTime > currentTime) {
         deduped.set(key, profile);
       }
     }

@@ -433,7 +433,7 @@
       </div>
       <div class="card">
         <table>
-          <thead><tr><th>Name</th><th>Phone</th><th>Branch</th><th>Year</th><th>College</th><th>Email</th><th>Saved At</th></tr></thead>
+          <thead><tr><th>Name</th><th>Email</th><th>Branch</th><th>Year</th><th>College</th><th>Saved At</th></tr></thead>
           <tbody id="profiles-table"></tbody>
         </table>
       </div>
@@ -1367,21 +1367,19 @@
         const data = await api('/api/admin/profiles');
         const tbody = document.getElementById('profiles-table');
         if (!data.length) {
-          tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><p>No profiles yet.</p></div></td></tr>';
+          tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><p>No profiles yet.</p></div></td></tr>';
           return;
         }
         tbody.innerHTML = data.map(p => {
           const time = (p.updatedAt || p.createdAt) ? new Date(p.updatedAt || p.createdAt).toLocaleString() : '';
           const branch = allBranches.find(b => b.id === p.branchId);
           const branchLabel = branch ? `${branch.shortName} - ${branch.name}` : (p.branchId || '-');
-          const phone = p.phoneNumber || p.phone || p.mobile || '-';
           return `<tr>
             <td><strong>${p.name}</strong></td>
-            <td>${phone}</td>
+            <td>${p.email || '-'}</td>
             <td>${branchLabel}</td>
             <td>${p.year}</td>
             <td>${p.collegeName}</td>
-            <td>${p.email || '-'}</td>
             <td>${time}</td>
           </tr>`;
         }).join('');

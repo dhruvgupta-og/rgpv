@@ -34,7 +34,7 @@ export default function ProfileScreen() {
   const [branchId, setBranchId] = useState("");
   const [year, setYear] = useState("");
   const [collegeName, setCollegeName] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
+  const [email, setEmail] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
@@ -66,7 +66,7 @@ export default function ProfileScreen() {
           branchId: remoteProfile?.branchId || localProfile?.branchId || "",
           year: remoteProfile?.year || localProfile?.year || "",
           collegeName: remoteProfile?.collegeName || localProfile?.collegeName || "",
-          phoneNumber: remoteProfile?.phoneNumber || localProfile?.phoneNumber || "",
+          email: remoteProfile?.email || localProfile?.email || user?.email || "",
           deviceId: localProfile?.deviceId || remoteProfile?.deviceId,
         };
 
@@ -78,7 +78,7 @@ export default function ProfileScreen() {
         setBranchId(profile.branchId);
         setYear(profile.year);
         setCollegeName(profile.collegeName);
-        setPhoneNumber(profile.phoneNumber);
+        setEmail(profile.email);
 
         if (isStoredProfileComplete(profile)) {
           setShowForm(false);
@@ -102,12 +102,13 @@ export default function ProfileScreen() {
 
   const handleSave = async () => {
     const deviceId = await getOrCreateProfileDeviceId();
+    const normalizedEmail = email.trim() || auth.currentUser?.email || "";
     const profile: StoredProfile = {
       name: name.trim(),
       branchId,
       year,
       collegeName: collegeName.trim(),
-      phoneNumber: phoneNumber.trim(),
+      email: normalizedEmail,
       deviceId,
     };
 
@@ -122,7 +123,7 @@ export default function ProfileScreen() {
       const user = auth.currentUser;
       await apiRequest("POST", "/api/profile", {
         ...profile,
-        email: user?.email || null,
+        email: normalizedEmail,
         firebaseUid: user?.uid || null,
       });
       await saveStoredProfile(profile);
@@ -131,7 +132,7 @@ export default function ProfileScreen() {
         await db.collection("profiles").doc(user.uid).set(
           {
             ...profile,
-            email: user.email || null,
+            email: normalizedEmail,
             firebaseUid: user.uid,
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
             updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -142,7 +143,7 @@ export default function ProfileScreen() {
 
       setName(profile.name);
       setCollegeName(profile.collegeName);
-      setPhoneNumber(profile.phoneNumber);
+      setEmail(profile.email);
       setLastSavedAt(new Date().toLocaleString());
       setShowForm(false);
       Alert.alert("Success", "Profile saved successfully!");
@@ -162,7 +163,7 @@ export default function ProfileScreen() {
     setBranchId("");
     setYear("");
     setCollegeName("");
-    setPhoneNumber("");
+    setEmail(auth.currentUser?.email || "");
     setLastSavedAt(null);
     setShowForm(true);
   };
@@ -334,11 +335,12 @@ export default function ProfileScreen() {
             />
             <TextInput
               style={styles.input}
-              placeholder="Phone Number"
+              placeholder="Email Address"
               placeholderTextColor={colors.textMuted}
-              value={phoneNumber}
-              onChangeText={setPhoneNumber}
-              keyboardType="phone-pad"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
             />
             <Pressable style={styles.primaryBtn} onPress={handleSave} disabled={saving}>
               <Text style={styles.primaryBtnText}>{saving ? "Saving..." : "Save Profile"}</Text>
@@ -398,11 +400,11 @@ export default function ProfileScreen() {
 
             <View style={styles.detailRow}>
               <View style={styles.detailIconBox}>
-                <Feather name="phone" size={20} color={colors.primary} />
+                <Feather name="mail" size={20} color={colors.primary} />
               </View>
               <View style={styles.detailContent}>
-                <Text style={styles.detailLabel}>Phone</Text>
-                <Text style={styles.detailValue}>{phoneNumber}</Text>
+                <Text style={styles.detailLabel}>Email</Text>
+                <Text style={styles.detailValue}>{email}</Text>
               </View>
             </View>
             {lastSavedAt ? <Text style={styles.savedAtText}>Last saved: {lastSavedAt}</Text> : null}
