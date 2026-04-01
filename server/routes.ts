@@ -73,8 +73,30 @@ function csvEscape(value: unknown) {
   return text;
 }
 
+function htmlEscape(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function formatProfileTime(profile: Record<string, any>) {
   return profile.updatedAt || profile.createdAt || "";
+}
+
+function formatProfileDateTime(value: unknown) {
+  if (!value) return "";
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+  return date.toLocaleString("en-IN");
+}
+
+function getProfilePhone(profile: Record<string, any>) {
+  return profile.phoneNumber || profile.phone || profile.mobile || "";
 }
 
 function normalizeBranchId(raw?: string) {
@@ -361,7 +383,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ];
       const rows = data.map((profile: any) => [
         profile.name,
-        profile.phoneNumber,
+        getProfilePhone(profile),
         branchMap.get(profile.branchId) || profile.branchId,
         profile.year,
         profile.collegeName,
@@ -375,6 +397,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader("Content-Disposition", 'attachment; filename="profiles-export.csv"');
       res.send(csv);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/admin/profiles/export.xls", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const data = await storage.getProfiles();
+      const branches = await storage.getAllBranches();
+      const branchMap = new Map(branches.map((branch: any) => [branch.id, `${branch.shortName} - ${branch.name}`]));
+      const header = [
+        "Name",
+        "Phone Number",
+        "Branch",
+        "Year",
+        "College",
+        "Email",
+        "Device ID",
+        "Firebase UID",
+        "Saved At",
+        "Created At",
+      ];
+
+      const rows = data.map((profile: any) => [
+        profile.name,
+        getProfilePhone(profile),
+        branchMap.get(profile.branchId) || profile.branchId,
+        profile.year,
+        profile.collegeName,
+        profile.email,
+        profile.deviceId,
+        profile.firebaseUid,
+        formatProfileDateTime(formatProfileTime(profile)),
+        formatProfileDateTime(profile.createdAt),
+      ]);
+
+      const tableHead = header.map((cell) => `<th>${htmlEscape(cell)}</th>`).join("");
+      const tableBody = rows
+        .map((row) => `<tr>${row.map((cell) => `<td>${htmlEscape(cell)}</td>`).join("")}</tr>`)
+        .join("");
+
+      const excelHtml =
+        "\uFEFF" +
+        `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      table { border-collapse: collapse; font-family: Arial, sans-serif; }
+      th, td { border: 1px solid #cbd5e1; padding: 8px 10px; text-align: left; }
+      th { background: #e2e8f0; font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <table>
+      <thead><tr>${tableHead}</tr></thead>
+      <tbody>${tableBody}</tbody>
+    </table>
+  </body>
+</html>`;
+
+      res.setHeader("Content-Type", "application/vnd.ms-excel; charset=utf-8");
+      res.setHeader("Content-Disposition", 'attachment; filename="profiles-export.xls"');
+      res.send(excelHtml);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
