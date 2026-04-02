@@ -329,14 +329,6 @@ export default function ProfileScreen() {
     ]);
   };
 
-  if (loadingProfile) {
-    return (
-      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
-
   const selectedBranch = branches.find((b) => b.id === branchId);
   const savedSubjects = useMemo(
     () => allSubjects.filter((subject) => bookmarks.includes(subject.id)),
@@ -350,6 +342,14 @@ export default function ProfileScreen() {
   const removeSavedSubject = (subjectId: string) => {
     toggleBookmark(subjectId);
   };
+
+  if (loadingProfile) {
+    return (
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <ScrollView
