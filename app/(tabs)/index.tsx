@@ -1,7 +1,7 @@
-import { StyleSheet, Text, View, ScrollView, Pressable, Platform, ActivityIndicator, Linking } from "react-native";
-import React, { useEffect, useMemo, useState } from "react";
+import { StyleSheet, Text, View, ScrollView, Pressable, Platform, ActivityIndicator } from "react-native";
+import React, { useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
@@ -12,6 +12,12 @@ import { getApiUrl } from "@/lib/query-client";
 import { getViewerUrl } from "@/lib/pdf-viewer";
 import { ensureProfileComplete } from "@/lib/profile-guard";
 import { auth, db } from "@/lib/firebase-client";
+import { getStoredProfile } from "@/lib/profile-storage";
+
+function getFirstName(fullName?: string | null) {
+  const cleaned = (fullName || "").trim();
+  return cleaned ? cleaned.split(/\s+/)[0] : null;
+}
 
 function BranchCard({ branch }: { branch: Branch }) {
   const { colors } = useTheme();
@@ -114,27 +120,45 @@ export default function HomeScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [profileName, setProfileName] = useState<string | null>(null);
 
-  useEffect(() => {
-    const user = auth.currentUser;
-    if (!user) {
-      setProfileName(null);
-      return;
-    }
-    db.collection("profiles")
-      .doc(user.uid)
-      .get()
-      .then((snap) => {
-        const data = snap.exists ? (snap.data() as any) : {};
-        const fullName = (data?.name || user.displayName || "").trim();
-        const firstName = fullName ? fullName.split(/\s+/)[0] : "";
-        setProfileName(firstName || null);
-      })
-      .catch(() => {
-        const fullName = (user.displayName || "").trim();
-        const firstName = fullName ? fullName.split(/\s+/)[0] : "";
-        setProfileName(firstName || null);
-      });
-  }, []);
+  useFocusEffect(
+    React.useCallback(() => {
+      let active = true;
+
+      const loadProfileName = async () => {
+        try {
+          const localProfile = await getStoredProfile();
+          const localFirstName = getFirstName(localProfile?.name);
+          if (localFirstName) {
+            if (active) setProfileName(localFirstName);
+            return;
+          }
+
+          const user = auth.currentUser;
+          if (!user) {
+            if (active) setProfileName(null);
+            return;
+          }
+
+          try {
+            const snap = await db.collection("profiles").doc(user.uid).get();
+            const data = snap.exists ? (snap.data() as any) : {};
+            const remoteFirstName = getFirstName(data?.name || user.displayName);
+            if (active) setProfileName(remoteFirstName);
+          } catch {
+            if (active) setProfileName(getFirstName(user.displayName));
+          }
+        } catch {
+          if (active) setProfileName(null);
+        }
+      };
+
+      loadProfileName();
+
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
 
   const greeting = (() => {
     const hour = new Date().getHours();
@@ -205,8 +229,8 @@ export default function HomeScreen() {
           <View style={styles.headerContent}>
             {profileName ? (
               <View style={styles.greetingBlock}>
-                <Text style={styles.greetingText}>Hey {profileName},</Text>
-                <Text style={styles.greetingSubtext}>{greeting}.</Text>
+                <Text style={styles.greetingText}>{greeting}, {profileName}</Text>
+                <Text style={styles.greetingSubtext}>Welcome back to your study space.</Text>
               </View>
             ) : null}
             <View style={styles.headerBadge}>
