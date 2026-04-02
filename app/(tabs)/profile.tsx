@@ -28,6 +28,16 @@ const years = [
   { value: "4", label: "4th Year" },
 ];
 
+function normalizeProfileTime(value: unknown) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "object" && value && "toDate" in value && typeof (value as any).toDate === "function") {
+    return (value as any).toDate().toISOString();
+  }
+  return "";
+}
+
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
@@ -55,60 +65,53 @@ export default function ProfileScreen() {
     queryKey: ["/api/subjects"],
   });
 
-  useEffect(() => {
-    let active = true;
+  const loadProfile = useCallback(async (showLoader = false) => {
+    if (showLoader) {
+      setLoadingProfile(true);
+    }
 
-    const loadProfile = async () => {
-      try {
-        const localProfile = await getStoredProfile();
-        const user = auth.currentUser;
-        let remoteProfile: Partial<StoredProfile> | null = null;
+    try {
+      const localProfile = await getStoredProfile();
+      const user = auth.currentUser;
+      let remoteProfile: Partial<StoredProfile> | null = null;
 
-        if (user) {
-          const snap = await db.collection("profiles").doc(user.uid).get();
-          if (snap.exists) {
-            remoteProfile = snap.data() as Partial<StoredProfile>;
-          }
-        }
-
-        const profile: StoredProfile = {
-          name: remoteProfile?.name || localProfile?.name || "",
-          branchId: remoteProfile?.branchId || localProfile?.branchId || "",
-          year: remoteProfile?.year || localProfile?.year || "",
-          collegeName: remoteProfile?.collegeName || localProfile?.collegeName || "",
-          email: remoteProfile?.email || localProfile?.email || user?.email || "",
-          deviceId: localProfile?.deviceId || remoteProfile?.deviceId,
-        };
-
-        if (!active) {
-          return;
-        }
-
-        setName(profile.name);
-        setBranchId(profile.branchId);
-        setYear(profile.year);
-        setCollegeName(profile.collegeName);
-        setEmail(profile.email);
-
-        if (isStoredProfileComplete(profile)) {
-          setShowForm(false);
-          setLastSavedAt(new Date().toLocaleString());
-        }
-      } catch (e) {
-        console.error("Failed to load profile", e);
-      } finally {
-        if (active) {
-          setLoadingProfile(false);
+      if (user) {
+        const snap = await db.collection("profiles").doc(user.uid).get();
+        if (snap.exists) {
+          remoteProfile = snap.data() as Partial<StoredProfile>;
         }
       }
-    };
 
-    loadProfile();
+      const profile: StoredProfile = {
+        name: remoteProfile?.name || localProfile?.name || "",
+        branchId: remoteProfile?.branchId || localProfile?.branchId || "",
+        year: remoteProfile?.year || localProfile?.year || "",
+        collegeName: remoteProfile?.collegeName || localProfile?.collegeName || "",
+        email: remoteProfile?.email || localProfile?.email || user?.email || "",
+        deviceId: localProfile?.deviceId || remoteProfile?.deviceId,
+        createdAt: normalizeProfileTime(remoteProfile?.createdAt) || normalizeProfileTime(localProfile?.createdAt),
+        updatedAt: normalizeProfileTime(remoteProfile?.updatedAt) || normalizeProfileTime(localProfile?.updatedAt),
+      };
 
-    return () => {
-      active = false;
-    };
+      setName(profile.name);
+      setBranchId(profile.branchId);
+      setYear(profile.year);
+      setCollegeName(profile.collegeName);
+      setEmail(profile.email);
+
+      const savedAt = profile.updatedAt || profile.createdAt || "";
+      setLastSavedAt(savedAt ? new Date(savedAt).toLocaleString() : null);
+      setShowForm(!isStoredProfileComplete(profile));
+    } catch (e) {
+      console.error("Failed to load profile", e);
+    } finally {
+      setLoadingProfile(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadProfile(true);
+  }, [loadProfile]);
 
   const loadDownloads = useCallback(async () => {
     setLoadingDownloads(true);
@@ -122,13 +125,17 @@ export default function ProfileScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      loadProfile(false);
       loadDownloads();
-    }, [loadDownloads]),
+    }, [loadDownloads, loadProfile]),
   );
+
+  const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
   const handleSave = async () => {
     const deviceId = await getOrCreateProfileDeviceId();
     const normalizedEmail = email.trim() || auth.currentUser?.email || "";
+    const timestamp = new Date().toISOString();
     const profile: StoredProfile = {
       name: name.trim(),
       branchId,
@@ -136,10 +143,16 @@ export default function ProfileScreen() {
       collegeName: collegeName.trim(),
       email: normalizedEmail,
       deviceId,
+      updatedAt: timestamp,
     };
 
     if (!isStoredProfileComplete(profile)) {
       Alert.alert("Missing info", "Please fill all fields.");
+      return;
+    }
+
+    if (!isValidEmail(normalizedEmail)) {
+      Alert.alert("Invalid email", "Please enter a valid email address.");
       return;
     }
 
@@ -169,7 +182,6 @@ export default function ProfileScreen() {
               ...profile,
               email: normalizedEmail,
               firebaseUid: user.uid,
-              createdAt: firebase.firestore.FieldValue.serverTimestamp(),
               updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
             },
             { merge: true },
@@ -185,7 +197,7 @@ export default function ProfileScreen() {
       setYear(profile.year);
       setCollegeName(profile.collegeName);
       setEmail(profile.email);
-      setLastSavedAt(new Date().toLocaleString());
+      setLastSavedAt(new Date(timestamp).toLocaleString());
       setShowForm(false);
       Alert.alert(
         "Profile saved",

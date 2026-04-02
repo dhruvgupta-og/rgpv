@@ -10,6 +10,8 @@ export interface StoredProfile {
   collegeName: string;
   email: string;
   deviceId?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export function isStoredProfileComplete(profile: Partial<StoredProfile> | null | undefined) {
