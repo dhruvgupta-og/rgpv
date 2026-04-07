@@ -1405,15 +1405,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       const subjects = await storage.getAllSubjects();
       const lookup = buildSubjectLookup(subjects as any[]);
+      const defaultSubjectId = req.body?.subjectId || req.query?.subjectId; // Support default subject from form/query
       const results = { created: 0, skipped: 0, errors: 0 };
       for (const row of rows.slice(1)) {
         try {
           const rawPath = idx.pdfPath >= 0 ? row[idx.pdfPath] : undefined;
+          let subjectId = resolveSubjectId(
+            idx.subjectId >= 0 ? row[idx.subjectId] : (idx.subjectCode >= 0 ? row[idx.subjectCode] : row[idx.subjectName]),
+            lookup
+          );
+          // Fall back to default subject if provided and no subject found in row
+          if (!subjectId && defaultSubjectId) {
+            subjectId = defaultSubjectId;
+          }
           const data = {
-            subjectId: resolveSubjectId(
-              idx.subjectId >= 0 ? row[idx.subjectId] : (idx.subjectCode >= 0 ? row[idx.subjectCode] : row[idx.subjectName]),
-              lookup
-            ),
+            subjectId,
             year: row[idx.year],
             month: row[idx.month],
             examType: row[idx.examType] || "Main",
