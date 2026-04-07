@@ -40,6 +40,7 @@ function RootLayoutNav() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="branch/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="subject/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="admin" options={{ headerShown: false }} />
     </Stack>
   );
 }

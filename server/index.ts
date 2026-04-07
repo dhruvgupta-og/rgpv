@@ -97,7 +97,6 @@ function setupRequestLogging(app: express.Application) {
     next();
   });
 }
-
 function getAppName(): string {
   try {
     const appJsonPath = path.resolve(process.cwd(), "app.json");

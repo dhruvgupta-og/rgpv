@@ -54,6 +54,12 @@
         "projectId": "e3931c76-b9aa-433e-9d54-b84032787d90"
       }
     },
-    "owner": "dhruvhereyo-organization"
+    "owner": "dhruvhereyo-organization",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/e3931c76-b9aa-433e-9d54-b84032787d90"
+    }
   }
 }
