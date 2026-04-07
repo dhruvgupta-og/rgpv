@@ -1,56 +1,43 @@
 import React, { useState } from "react";
-import { View, Text, ScrollView, Pressable, ActivityIndicator, Alert } from "react-native";
+import { View, Text, Pressable, ActivityIndicator, Alert } from "react-native";
 import { useTheme } from "@/lib/theme";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useRouter } from "expo-router";
 import * as DocumentPicker from "expo-document-picker";
-import { apiRequest } from "@/lib/query-client";
 
 interface UploadResult {
   created: number;
   skipped: number;
   errors: number;
+  type: "subjects" | "papers";
 }
 
 export default function BulkImportPage() {
   const { colors } = useTheme();
   const router = useRouter();
-  const [subjectsFile, setSubjectsFile] = useState<{ name: string; uri: string } | null>(null);
-  const [papersFile, setPapersFile] = useState<{ name: string; uri: string } | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ type: "subjects" | "papers"; data: UploadResult } | null>(null);
+  const [loading, setLoading] = useState<"subjects" | "papers" | null>(null);
+  const [results, setResults] = useState<UploadResult[]>([]);
 
-  const pickFile = async (type: "subjects" | "papers") => {
+  const pickAndUpload = async (type: "subjects" | "papers") => {
     try {
       const doc = await DocumentPicker.getDocumentAsync({
         type: "text/csv",
       });
 
-      if (doc.type === "success") {
-        if (type === "subjects") {
-          setSubjectsFile({ name: doc.name, uri: doc.uri });
-        } else {
-          setPapersFile({ name: doc.name, uri: doc.uri });
-        }
-      }
-    } catch (error) {
-      Alert.alert("Error", "Failed to pick file");
-    }
-  };
+      if (doc.type !== "success") return;
 
-  const uploadFile = async (type: "subjects" | "papers", fileUri: string) => {
-    setLoading(true);
-    try {
+      setLoading(type);
+
       const formData = new FormData();
       const file = {
-        uri: fileUri,
+        uri: doc.uri,
         type: "text/csv",
-        name: type === "subjects" ? "subjects.csv" : "papers.csv",
+        name: doc.name,
       } as any;
       formData.append("file", file);
 
       const response = await fetch(
-        `${process.env.EXPO_PUBLIC_DOMAIN || "http://localhost:5000"}/api/admin/import/${type === "subjects" ? "subjects" : "papers"}`,
+        `${process.env.EXPO_PUBLIC_DOMAIN || "http://localhost:5000"}/api/admin/import/${type}`,
         {
           method: "POST",
           body: formData,
@@ -65,26 +52,17 @@ export default function BulkImportPage() {
       }
 
       const data = (await response.json()) as UploadResult;
-      setResult({ type, data });
+      setResults((prev) => [{ ...data, type }, ...prev]);
+
       Alert.alert(
-        "Success",
-        `Created: ${data.created}, Skipped: ${data.skipped}, Errors: ${data.errors}`
+        "✓ Upload Complete",
+        `Created: ${data.created}\nSkipped: ${data.skipped}\nErrors: ${data.errors}`
       );
     } catch (error) {
       Alert.alert("Error", error instanceof Error ? error.message : "Upload failed");
     } finally {
-      setLoading(false);
+      setLoading(null);
     }
-  };
-
-  const handleSubjectsUpload = () => {
-    if (!subjectsFile) return;
-    uploadFile("subjects", subjectsFile.uri);
-  };
-
-  const handlePapersUpload = () => {
-    if (!papersFile) return;
-    uploadFile("papers", papersFile.uri);
   };
 
   return (
@@ -93,179 +71,112 @@ export default function BulkImportPage() {
       contentContainerStyle={{ padding: 16 }}
     >
       {/* Header */}
-      <View style={{ marginBottom: 24 }}>
-        <Pressable onPress={() => router.back()}>
-          <Text style={{ color: colors.primary, fontFamily: "Inter_600SemiBold", fontSize: 16, marginBottom: 12 }}>
+      <View style={{ marginBottom: 32 }}>
+        <Pressable onPress={() => router.back()} style={{ marginBottom: 16 }}>
+          <Text style={{ color: colors.primary, fontFamily: "Inter_600SemiBold", fontSize: 16 }}>
             ← Back
           </Text>
         </Pressable>
-        <Text style={{ color: colors.text, fontFamily: "Inter_700Bold", fontSize: 24, marginBottom: 4 }}>
+        <Text style={{ color: colors.text, fontFamily: "Inter_700Bold", fontSize: 28, marginBottom: 6 }}>
           Bulk Import
         </Text>
         <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", fontSize: 14 }}>
-          Upload CSV files to import subjects and papers
+          Upload CSV files to add subjects and papers
         </Text>
       </View>
 
-      {/* Subjects Section */}
-      <View
-        style={{
-          backgroundColor: colors.card,
-          borderWidth: 1,
-          borderColor: colors.cardBorder,
+      {/* Subjects Upload Button */}
+      <Pressable
+        onPress={() => pickAndUpload("subjects")}
+        disabled={loading !== null}
+        style={({ pressed }) => ({
+          backgroundColor: colors.primary,
           borderRadius: 12,
-          padding: 16,
+          padding: 20,
           marginBottom: 16,
-        }}
+          opacity: loading === "subjects" ? 0.7 : pressed ? 0.85 : 1,
+        })}
       >
-        <Text style={{ color: colors.text, fontFamily: "Inter_600SemiBold", fontSize: 16, marginBottom: 8 }}>
-          Subjects + Syllabus CSV
-        </Text>
-        <Text style={{ color: colors.textMuted, fontFamily: "Inter_400Regular", fontSize: 12, marginBottom: 12 }}>
-          Required: id, name, code, branchId, semester{"\n"}Optional: unit1_title, unit1_topics, etc.
-        </Text>
-
-        {subjectsFile && (
-          <Text style={{ color: colors.accent, fontFamily: "Inter_500Medium", fontSize: 13, marginBottom: 12 }}>
-            Selected: {subjectsFile.name}
-          </Text>
-        )}
-
-        <View style={{ flexDirection: "row", gap: 12 }}>
-          <Pressable
-            onPress={() => pickFile("subjects")}
-            style={{
-              flex: 1,
-              backgroundColor: colors.cardLight,
-              borderWidth: 1,
-              borderColor: colors.cardBorder,
-              borderRadius: 8,
-              paddingVertical: 12,
-              paddingHorizontal: 16,
-              alignItems: "center",
-            }}
-          >
-            <Text style={{ color: colors.textSecondary, fontFamily: "Inter_500Medium", fontSize: 14 }}>
-              Choose File
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={handleSubjectsUpload}
-            disabled={!subjectsFile || loading}
-            style={{
-              flex: 1,
-              backgroundColor: subjectsFile && !loading ? colors.primary : colors.cardLight,
-              borderRadius: 8,
-              paddingVertical: 12,
-              paddingHorizontal: 16,
-              alignItems: "center",
-              opacity: !subjectsFile || loading ? 0.5 : 1,
-            }}
-          >
-            {loading && result?.type === "subjects" ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={{ color: "#fff", fontFamily: "Inter_600SemiBold", fontSize: 14 }}>
-                Upload
+        <View style={{ alignItems: "center", gap: 12 }}>
+          {loading === "subjects" ? (
+            <ActivityIndicator color="#fff" size="large" />
+          ) : (
+            <>
+              <Text style={{ color: "#fff", fontFamily: "Inter_700Bold", fontSize: 18 }}>
+                📚 Upload Subjects CSV
               </Text>
-            )}
-          </Pressable>
+              <Text style={{ color: "#fff", fontFamily: "Inter_400Regular", fontSize: 12, textAlign: "center" }}>
+                Tap to select and upload subjects with syllabus
+              </Text>
+            </>
+          )}
         </View>
-      </View>
+      </Pressable>
 
-      {/* Papers Section */}
-      <View
-        style={{
-          backgroundColor: colors.card,
-          borderWidth: 1,
-          borderColor: colors.cardBorder,
+      {/* Papers Upload Button */}
+      <Pressable
+        onPress={() => pickAndUpload("papers")}
+        disabled={loading !== null}
+        style={({ pressed }) => ({
+          backgroundColor: colors.primary,
           borderRadius: 12,
-          padding: 16,
-          marginBottom: 16,
-        }}
+          padding: 20,
+          marginBottom: 24,
+          opacity: loading === "papers" ? 0.7 : pressed ? 0.85 : 1,
+        })}
       >
-        <Text style={{ color: colors.text, fontFamily: "Inter_600SemiBold", fontSize: 16, marginBottom: 8 }}>
-          Papers CSV
-        </Text>
-        <Text style={{ color: colors.textMuted, fontFamily: "Inter_400Regular", fontSize: 12, marginBottom: 12 }}>
-          Format: subjectCode or subjectName, year, month, examType, pdfPath (optional)
-        </Text>
-
-        {papersFile && (
-          <Text style={{ color: colors.accent, fontFamily: "Inter_500Medium", fontSize: 13, marginBottom: 12 }}>
-            Selected: {papersFile.name}
-          </Text>
-        )}
-
-        <View style={{ flexDirection: "row", gap: 12 }}>
-          <Pressable
-            onPress={() => pickFile("papers")}
-            style={{
-              flex: 1,
-              backgroundColor: colors.cardLight,
-              borderWidth: 1,
-              borderColor: colors.cardBorder,
-              borderRadius: 8,
-              paddingVertical: 12,
-              paddingHorizontal: 16,
-              alignItems: "center",
-            }}
-          >
-            <Text style={{ color: colors.textSecondary, fontFamily: "Inter_500Medium", fontSize: 14 }}>
-              Choose File
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={handlePapersUpload}
-            disabled={!papersFile || loading}
-            style={{
-              flex: 1,
-              backgroundColor: papersFile && !loading ? colors.primary : colors.cardLight,
-              borderRadius: 8,
-              paddingVertical: 12,
-              paddingHorizontal: 16,
-              alignItems: "center",
-              opacity: !papersFile || loading ? 0.5 : 1,
-            }}
-          >
-            {loading && result?.type === "papers" ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={{ color: "#fff", fontFamily: "Inter_600SemiBold", fontSize: 14 }}>
-                Upload
+        <View style={{ alignItems: "center", gap: 12 }}>
+          {loading === "papers" ? (
+            <ActivityIndicator color="#fff" size="large" />
+          ) : (
+            <>
+              <Text style={{ color: "#fff", fontFamily: "Inter_700Bold", fontSize: 18 }}>
+                📄 Upload Papers CSV
               </Text>
-            )}
-          </Pressable>
+              <Text style={{ color: "#fff", fontFamily: "Inter_400Regular", fontSize: 12, textAlign: "center" }}>
+                Tap to select and upload question papers
+              </Text>
+            </>
+          )}
         </View>
-      </View>
+      </Pressable>
 
-      {/* Results */}
-      {result && (
-        <View
-          style={{
-            backgroundColor: colors.success + "15",
-            borderWidth: 1,
-            borderColor: colors.success + "40",
-            borderRadius: 12,
-            padding: 16,
-          }}
-        >
-          <Text style={{ color: colors.text, fontFamily: "Inter_600SemiBold", fontSize: 15, marginBottom: 8 }}>
-            {result.type === "subjects" ? "Subjects" : "Papers"} Import Results
+      {/* Recent Results */}
+      {results.length > 0 && (
+        <View>
+          <Text style={{ color: colors.textSecondary, fontFamily: "Inter_600SemiBold", fontSize: 13, marginBottom: 12, textTransform: "uppercase" }}>
+            Recent Uploads
           </Text>
-          <View style={{ gap: 6 }}>
-            <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", fontSize: 13 }}>
-              Created: <Text style={{ color: colors.success, fontFamily: "Inter_600SemiBold" }}>{result.data.created}</Text>
-            </Text>
-            <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", fontSize: 13 }}>
-              Skipped: <Text style={{ color: colors.warning, fontFamily: "Inter_600SemiBold" }}>{result.data.skipped}</Text>
-            </Text>
-            <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", fontSize: 13 }}>
-              Errors: <Text style={{ color: colors.danger, fontFamily: "Inter_600SemiBold" }}>{result.data.errors}</Text>
-            </Text>
-          </View>
+          {results.map((result, idx) => (
+            <View
+              key={idx}
+              style={{
+                backgroundColor: colors.success + "15",
+                borderWidth: 1,
+                borderColor: colors.success + "40",
+                borderRadius: 10,
+                padding: 14,
+                marginBottom: 10,
+              }}
+            >
+              <Text style={{ color: colors.text, fontFamily: "Inter_600SemiBold", fontSize: 13, marginBottom: 8 }}>
+                {result.type === "subjects" ? "📚 Subjects" : "📄 Papers"}
+              </Text>
+              <View style={{ gap: 4 }}>
+                <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", fontSize: 12 }}>
+                  ✓ Created: <Text style={{ color: colors.success, fontFamily: "Inter_600SemiBold" }}>{result.created}</Text>
+                </Text>
+                <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", fontSize: 12 }}>
+                  ⊗ Skipped: <Text style={{ color: colors.warning, fontFamily: "Inter_600SemiBold" }}>{result.skipped}</Text>
+                </Text>
+                {result.errors > 0 && (
+                  <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", fontSize: 12 }}>
+                    ✕ Errors: <Text style={{ color: colors.danger, fontFamily: "Inter_600SemiBold" }}>{result.errors}</Text>
+                  </Text>
+                )}
+              </View>
+            </View>
+          ))}
         </View>
       )}
     </KeyboardAwareScrollViewCompat>
