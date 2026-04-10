@@ -65,9 +65,10 @@ function BranchCard({ branch }: { branch: Branch }) {
 function RecentPaperCard({ paper, subject }: { paper: Paper; subject?: Subject }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const examType = paper.examType === "Supply" || paper.examType === "Supplementary" || paper.examType === "Back"
+  const normalizedType = paper.examType === "Supply" || paper.examType === "Supplementary"
     ? "Mid Sem"
     : paper.examType;
+  const examType = normalizedType;
   const isMain = examType === "Main";
 
   const handlePress = async () => {
@@ -194,8 +195,8 @@ export default function HomeScreen() {
   };
 
   const filteredSubjects = subjects;
-  const filteredPapers = papers;
-  const filteredMostViewed = mostViewed;
+  const filteredPapers = papers.filter(p => p.examType?.toLowerCase() !== "back");
+  const filteredMostViewed = mostViewed.filter(p => p.examType?.toLowerCase() !== "back");
 
   const recentPapers = [...filteredPapers]
     .sort((a, b) => {

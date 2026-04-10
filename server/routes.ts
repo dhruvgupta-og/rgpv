@@ -615,7 +615,10 @@ function normalizeExamType(raw?: string) {
   const value = String(raw || "").trim().toLowerCase();
   if (!value) return "Main";
   if (value === "main") return "Main";
-  if (value === "mid sem" || value === "midsem" || value === "mid-sem" || value === "supply" || value === "supplementary" || value === "back") {
+  if (value === "back" || value === "backpaper") {
+    return null; // Skip back papers entirely
+  }
+  if (value === "mid sem" || value === "midsem" || value === "mid-sem" || value === "supply" || value === "supplementary") {
     return "Mid Sem";
   }
   return value
@@ -1265,13 +1268,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/papers", requireAdmin, upload.single("pdf"), async (req: Request, res: Response) => {
     try {
+      const examType = normalizeExamType(req.body.examType);
+      if (!examType) {
+        return res.status(400).json({ error: "Invalid exam type. 'Back' papers are not allowed." });
+      }
       const pdfLink = normalizePdfLink(req.body.pdfUrl);
       const pdfPath = req.file ? await uploadPdfToFirebase(req.file) : (pdfLink || null);
       const paper = await storage.createPaper({
         subjectId: req.body.subjectId,
         year: req.body.year,
         month: req.body.month,
-        examType: normalizeExamType(req.body.examType),
+        examType,
         pdfPath,
       });
       await storage.createAuditLog({
@@ -1337,7 +1344,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updateData: any = {};
       if (req.body.year) updateData.year = req.body.year;
       if (req.body.month) updateData.month = req.body.month;
-      if (req.body.examType) updateData.examType = normalizeExamType(req.body.examType);
+      if (req.body.examType) {
+        const examType = normalizeExamType(req.body.examType);
+        if (!examType) {
+          return res.status(400).json({ error: "Invalid exam type. 'Back' papers are not allowed." });
+        }
+        updateData.examType = examType;
+      }
       if (req.body.subjectId) updateData.subjectId = req.body.subjectId;
       if (req.file) {
         updateData.pdfPath = await uploadPdfToFirebase(req.file);
@@ -1597,11 +1610,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (!subjectId && defaultSubjectId) {
             subjectId = defaultSubjectId;
           }
+          const examType = normalizeExamType(row[idx.examType]);
+          if (!examType) {
+            results.skipped++;
+            continue;
+          }
           const data = {
             subjectId,
             year: row[idx.year],
             month: row[idx.month],
-            examType: normalizeExamType(row[idx.examType]),
+            examType,
             pdfPath: rawPath ? normalizePdfLink(rawPath) : undefined,
           };
           if (!data.subjectId || !data.year || !data.month) {
@@ -1641,7 +1659,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const month = String(item.month || "").trim();
           const examType = normalizeExamType(item.examType);
           const pdfPath = normalizePdfLink(String(item.pdfPath || "").trim());
-          if (!subjectId || !year || !month || !pdfPath) {
+          if (!subjectId || !year || !month || !pdfPath || !examType) {
             results.skipped++;
             continue;
           }

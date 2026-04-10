@@ -23,6 +23,9 @@ function normalizeExamTypeLabel(value?: string) {
   if (raw === "mid sem" || raw === "midsem" || raw === "mid-sem" || raw === "supply" || raw === "supplementary") {
     return "Mid Sem";
   }
+  if (raw === "back" || raw === "backpaper") {
+    return null; // Filter out back papers
+  }
   return String(value || "").trim();
 }
 
@@ -312,7 +315,7 @@ export default function SubjectScreen() {
 
   const bookmarked = isBookmarked(subject.id);
   const syllabus = subject.syllabus || [];
-  const papers = subject.papers || [];
+  const papers = (subject.papers || []).filter(p => normalizeExamTypeLabel(p.examType) !== null);
   const filteredPapers = paperFilter === "All"
     ? papers
     : papers.filter(p => normalizeExamTypeLabel(p.examType) === paperFilter);
