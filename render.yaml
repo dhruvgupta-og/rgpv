@@ -3,8 +3,8 @@ services:
     name: rgpv-api
     env: node
     plan: free
-    buildCommand: npm install && npm run server:build
-    startCommand: node server_dist/index.js
+    buildCommand: npm install && npm run expo:static:build && npm run server:build
+    startCommand: node server_dist/index.cjs
     envVars:
       - key: NODE_ENV
         value: production
