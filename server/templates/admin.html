@@ -234,7 +234,7 @@
     <div id="section-syllabus" class="section">
       <div class="page-header">
         <div><h1>Syllabus</h1><p>Manage and update syllabus subject-wise</p></div>
-        <button class="btn btn-primary" onclick="openSyllabusModal()">Edit Selected Subject</button>
+        <button class="btn btn-primary" onclick="openSyllabusModal()">Update Subject Syllabus</button>
       </div>
       <div style="margin-bottom:16px;">
         <select id="syllabus-subject-filter" onchange="loadSyllabus()" style="padding:8px 12px; background:var(--card); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:14px; min-width: 300px;">
@@ -346,7 +346,8 @@
         <div class="card-header"><h3>Subjects + Syllabus CSV</h3></div>
         <div style="padding:16px 20px;">
           <p style="color:var(--text-muted); font-size:13px; margin-bottom:10px;">
-            Required: <code>id,name,code,branchId,semester</code><br>
+            Required: <code>name,code,branchId,semester</code><br>
+            Optional: <code>id</code>. If omitted, the subject ID is created automatically.<br>
             Optional syllabus: <code>unit1_title,unit1_topics,unit2_title,unit2_topics,...,unit8_title,unit8_topics</code><br>
             Topics can be separated by <code>|</code> or new lines.
           </p>
@@ -489,7 +490,7 @@
         </div>
         <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
           <p style="margin:0; color:var(--text-muted); font-size:14px;">Edit the full syllabus for a subject and save all units together.</p>
-          <button type="button" class="btn btn-outline" onclick="addSyllabusEditorUnit()">+ Add Unit</button>
+          <button type="button" class="btn btn-outline" onclick="addSyllabusEditorUnit()">+ Add Another Unit</button>
         </div>
         <div id="syllabus-units-editor"></div>
       </div>
