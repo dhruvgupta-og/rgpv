@@ -590,6 +590,27 @@ function resolveSubjectId(raw: any, lookup: ReturnType<typeof buildSubjectLookup
   return "";
 }
 
+function parseSubjectIdsInput(raw: any) {
+  if (Array.isArray(raw)) {
+    return raw.map((value) => String(value || "").trim()).filter(Boolean);
+  }
+
+  const value = String(raw || "").trim();
+  if (!value) return [];
+
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) {
+      return parsed.map((item) => String(item || "").trim()).filter(Boolean);
+    }
+  } catch {}
+
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 const csvUpload = multer({
   storage: multer.memoryStorage(),
   fileFilter: (_req, file, cb) => {
@@ -1092,6 +1113,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/admin/syllabus/apply-multiple", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const subjectIds = Array.from(new Set(parseSubjectIdsInput(req.body?.subjectIds)));
+      if (!subjectIds.length) {
+        return res.status(400).json({ error: "At least one subject is required" });
+      }
+
+      const units = Array.isArray(req.body?.units) ? req.body.units : [];
+      const normalizedUnits = units
+        .map((unit: any, index: number) => ({
+          unitNumber: Number(unit?.unitNumber) || index + 1,
+          title: String(unit?.title || "").trim(),
+          topics: Array.isArray(unit?.topics)
+            ? unit.topics.map((topic: any) => String(topic || "").trim()).filter(Boolean)
+            : [],
+        }))
+        .filter((unit: any) => unit.title);
+
+      for (const subjectId of subjectIds) {
+        const subject = await storage.getSubject(subjectId);
+        if (!subject) {
+          return res.status(404).json({ error: `Subject not found: ${subjectId}` });
+        }
+      }
+
+      for (const subjectId of subjectIds) {
+        await storage.replaceSyllabusUnits(subjectId, normalizedUnits);
+      }
+
+      await storage.createAuditLog({
+        userId: (req as any).adminUser?.id,
+        action: "update",
+        entity: "syllabus_bulk_apply",
+        entityId: subjectIds.join(","),
+        details: { subjectIds, units: normalizedUnits, subjectCount: subjectIds.length },
+        ip: req.ip,
+      });
+
+      res.json({ updatedSubjects: subjectIds.length, unitsPerSubject: normalizedUnits.length });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.post("/api/syllabus", requireAdmin, async (req: Request, res: Response) => {
     try {
       const unit = await storage.createSyllabusUnit(req.body);
@@ -1210,6 +1275,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/admin/papers/apply-multiple", requireAdmin, upload.single("pdf"), async (req: Request, res: Response) => {
+    try {
+      const subjectIds = Array.from(new Set(parseSubjectIdsInput(req.body?.subjectIds || req.body?.subjectId)));
+      if (!subjectIds.length) {
+        return res.status(400).json({ error: "At least one subject is required" });
+      }
+
+      for (const subjectId of subjectIds) {
+        const subject = await storage.getSubject(subjectId);
+        if (!subject) {
+          return res.status(404).json({ error: `Subject not found: ${subjectId}` });
+        }
+      }
+
+      const pdfLink = normalizePdfLink(req.body.pdfUrl);
+      const pdfPath = req.file ? await uploadPdfToFirebase(req.file) : (pdfLink || null);
+      const year = String(req.body.year || "").trim();
+      const month = String(req.body.month || "").trim();
+      const examType = String(req.body.examType || "Main").trim() || "Main";
+
+      if (!year || !month) {
+        return res.status(400).json({ error: "Year and month are required" });
+      }
+
+      const created = [];
+      for (const subjectId of subjectIds) {
+        created.push(await storage.createPaper({ subjectId, year, month, examType, pdfPath }));
+      }
+
+      await storage.createAuditLog({
+        userId: (req as any).adminUser?.id,
+        action: "create",
+        entity: "paper_bulk_apply",
+        entityId: subjectIds.join(","),
+        details: { subjectIds, year, month, examType, pdfPath, created: created.length },
+        ip: req.ip,
+      });
+
+      res.status(201).json({ created: created.length, subjectIds });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.put("/api/papers/:id", requireAdmin, upload.single("pdf"), async (req: Request, res: Response) => {
     try {
       const updateData: any = {};
@@ -1242,8 +1351,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const paper = await storage.getPaper(Number(req.params.id));
       if (paper?.pdfPath) {
+        const allPapers = await storage.getAllPapers();
+        const isSharedPdf = allPapers.some((entry: any) => String(entry.id) !== String(req.params.id) && entry.pdfPath === paper.pdfPath);
         const filePath = path.resolve(process.cwd(), paper.pdfPath.replace(/^\//, ""));
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        const isLocalPath = !/^https?:\/\//i.test(paper.pdfPath);
+        if (!isSharedPdf && isLocalPath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
       }
       await storage.deletePaper(Number(req.params.id));
       await storage.createAuditLog({

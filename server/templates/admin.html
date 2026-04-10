@@ -488,6 +488,11 @@
           <label>Subject</label>
           <select id="syllabus-subject" onchange="loadSyllabusEditorSubject(this.value)"></select>
         </div>
+        <div class="form-group">
+          <label>Also Apply To Other Subjects</label>
+          <select id="syllabus-extra-subjects" multiple size="8" style="padding:8px 12px; background:var(--card); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:14px; width:100%;"></select>
+          <small style="color:var(--text-muted); font-size:12px;">Hold Ctrl or Cmd to select multiple subjects across branches.</small>
+        </div>
         <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
           <p style="margin:0; color:var(--text-muted); font-size:14px;">Edit the full syllabus for a subject and save all units together.</p>
           <button type="button" class="btn btn-outline" onclick="addSyllabusEditorUnit()">+ Add Another Unit</button>
@@ -504,7 +509,12 @@
       <div class="modal-header"><h3 id="paper-modal-title">Add Paper</h3><button class="modal-close" onclick="closeModal('paper-modal')">&times;</button></div>
       <div class="modal-body">
         <input type="hidden" id="paper-edit-id">
-        <div class="form-group"><label>Subject</label><select id="paper-subject"></select></div>
+        <div class="form-group"><label>Subject</label><select id="paper-subject" onchange="populateExtraSubjectSelect('paper-extra-subjects', this.value, getMultiSelectValues('paper-extra-subjects'))"></select></div>
+        <div class="form-group">
+          <label>Also Apply To Other Subjects</label>
+          <select id="paper-extra-subjects" multiple size="8" style="padding:8px 12px; background:var(--card); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:14px; width:100%;"></select>
+          <small id="paper-extra-help" style="color:var(--text-muted); font-size:12px;">Create the same paper for multiple subjects across branches in one upload.</small>
+        </div>
         <div class="form-row">
           <div class="form-group"><label>Year</label><input type="text" id="paper-year" placeholder="2024"></div>
           <div class="form-group"><label>Month</label><select id="paper-month"><option>Jan</option><option>Feb</option><option>Mar</option><option>Apr</option><option>May</option><option value="Jun">Jun</option><option>Jul</option><option>Aug</option><option>Sep</option><option>Oct</option><option>Nov</option><option value="Dec" selected>Dec</option></select></div>
@@ -610,6 +620,27 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+    }
+
+    function getMultiSelectValues(id) {
+      const el = document.getElementById(id);
+      if (!el) return [];
+      return Array.from(el.selectedOptions || []).map(option => option.value).filter(Boolean);
+    }
+
+    function populateExtraSubjectSelect(selectId, currentSubjectId, selectedValues = []) {
+      const select = document.getElementById(selectId);
+      if (!select) return;
+
+      const values = new Set(selectedValues.filter(value => value && value !== currentSubjectId));
+      select.innerHTML = allSubjects
+        .filter(subject => subject.id !== currentSubjectId)
+        .map(subject => `<option value="${subject.id}">${formatSubjectLabel(subject)}</option>`)
+        .join('');
+
+      Array.from(select.options).forEach(option => {
+        option.selected = values.has(option.value);
+      });
     }
 
     function showSection(name) {
@@ -844,8 +875,10 @@
     function populateSubjectDropdowns() {
       const selectedSyllabusFilter = document.getElementById('syllabus-subject-filter')?.value || '';
       const selectedSyllabusSubject = document.getElementById('syllabus-subject')?.value || '';
+      const selectedSyllabusExtras = getMultiSelectValues('syllabus-extra-subjects');
       const selectedPaperFilter = document.getElementById('paper-subject-filter')?.value || '';
       const selectedPaperSubject = document.getElementById('paper-subject')?.value || '';
+      const selectedPaperExtras = getMultiSelectValues('paper-extra-subjects');
       const selectedVideoFilter = document.getElementById('video-subject-filter')?.value || '';
       const selectedVideoSubject = document.getElementById('video-subject')?.value || '';
       const selectedAnalyzerSubject = document.getElementById('analyzer-subject')?.value || '';
@@ -888,6 +921,9 @@
         document.getElementById('reassign-to').value = subjects.some(s => s.id === selectedReassignTo)
           ? selectedReassignTo
           : (subjects[0]?.id || '');
+
+        populateExtraSubjectSelect('syllabus-extra-subjects', document.getElementById('syllabus-subject').value, selectedSyllabusExtras);
+        populateExtraSubjectSelect('paper-extra-subjects', document.getElementById('paper-subject').value, selectedPaperExtras);
       });
     }
 
@@ -965,6 +1001,8 @@
 
     async function loadSyllabusEditorSubject(subjectId) {
       const wrap = document.getElementById('syllabus-units-editor');
+      const selectedExtras = getMultiSelectValues('syllabus-extra-subjects');
+      populateExtraSubjectSelect('syllabus-extra-subjects', subjectId, selectedExtras);
       if (!subjectId) {
         wrap.innerHTML = '<div class="empty-state"><p>Select a subject to edit syllabus</p></div>';
         document.getElementById('syllabus-modal-title').textContent = 'Edit Subject Syllabus';
@@ -998,6 +1036,7 @@
     async function saveSyllabus() {
       const subjectId = document.getElementById('syllabus-subject').value;
       if (!subjectId) { toast('Select a subject', 'error'); return; }
+      const subjectIds = Array.from(new Set([subjectId, ...getMultiSelectValues('syllabus-extra-subjects')].filter(Boolean)));
 
       const unitCards = Array.from(document.querySelectorAll('#syllabus-units-editor .syllabus-editor-unit'));
       const units = [];
@@ -1023,12 +1062,12 @@
       }
 
       try {
-        await api('/api/subjects/' + subjectId + '/syllabus', {
-          method: 'PUT',
+        await api('/api/admin/syllabus/apply-multiple', {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ units }),
+          body: JSON.stringify({ subjectIds, units }),
         });
-        toast('Syllabus updated');
+        toast(subjectIds.length > 1 ? `Syllabus applied to ${subjectIds.length} subjects` : 'Syllabus updated');
         document.getElementById('syllabus-subject-filter').value = subjectId;
         closeModal('syllabus-modal');
         loadSyllabus();
@@ -1084,6 +1123,11 @@
       document.getElementById('paper-modal-title').textContent = paper ? 'Edit Paper' : 'Add Paper';
       document.getElementById('paper-edit-id').value = paper ? paper.id : '';
       document.getElementById('paper-subject').value = paper ? paper.subjectId : (document.getElementById('paper-subject-filter').value || allSubjects[0]?.id || '');
+      populateExtraSubjectSelect('paper-extra-subjects', document.getElementById('paper-subject').value, []);
+      document.getElementById('paper-extra-subjects').disabled = !!paper;
+      document.getElementById('paper-extra-help').textContent = paper
+        ? 'Additional subject copy is available when creating a new paper.'
+        : 'Create the same paper for multiple subjects across branches in one upload.';
       document.getElementById('paper-year').value = paper ? paper.year : new Date().getFullYear().toString();
       document.getElementById('paper-month').value = paper ? paper.month : 'Dec';
       document.getElementById('paper-type').value = paper ? paper.examType : 'Main';
@@ -1097,7 +1141,10 @@
     async function savePaper() {
       const editId = document.getElementById('paper-edit-id').value;
       const formData = new FormData();
-      formData.append('subjectId', document.getElementById('paper-subject').value);
+      const primarySubjectId = document.getElementById('paper-subject').value;
+      const subjectIds = Array.from(new Set([primarySubjectId, ...getMultiSelectValues('paper-extra-subjects')].filter(Boolean)));
+      formData.append('subjectId', primarySubjectId);
+      formData.append('subjectIds', JSON.stringify(subjectIds));
       formData.append('year', document.getElementById('paper-year').value.trim());
       formData.append('month', document.getElementById('paper-month').value);
       formData.append('examType', document.getElementById('paper-type').value);
@@ -1108,11 +1155,13 @@
       if (!formData.get('subjectId') || !formData.get('year')) { toast('Fill all required fields', 'error'); return; }
       try {
         if (editId) {
-          await fetch(API + '/api/papers/' + editId, { method: 'PUT', body: formData });
+          const res = await fetch(API + '/api/papers/' + editId, { method: 'PUT', body: formData });
+          if (!res.ok) throw new Error(await res.text());
           toast('Paper updated');
         } else {
-          await fetch(API + '/api/papers', { method: 'POST', body: formData });
-          toast('Paper created');
+          const res = await fetch(API + '/api/admin/papers/apply-multiple', { method: 'POST', body: formData });
+          if (!res.ok) throw new Error(await res.text());
+          toast(subjectIds.length > 1 ? `Paper created for ${subjectIds.length} subjects` : 'Paper created');
         }
         closeModal('paper-modal');
         loadPapers();
