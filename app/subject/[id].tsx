@@ -15,6 +15,17 @@ import { downloadPaper, isDownloaded, type DownloadItem } from "@/lib/downloads"
 import { ensureProfileComplete } from "@/lib/profile-guard";
 
 type TabType = "syllabus" | "papers" | "videos" | "analyzer";
+
+function normalizeExamTypeLabel(value?: string) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "Main";
+  if (raw === "main") return "Main";
+  if (raw === "mid sem" || raw === "midsem" || raw === "mid-sem" || raw === "supply" || raw === "supplementary" || raw === "back") {
+    return "Mid Sem";
+  }
+  return String(value || "").trim();
+}
+
 function SyllabusUnitCard({ unit, index }: { unit: SyllabusUnit; index: number }) {
   const [expanded, setExpanded] = useState(index === 0);
   const { colors } = useTheme();
@@ -54,7 +65,8 @@ function SyllabusUnitCard({ unit, index }: { unit: SyllabusUnit; index: number }
 function PaperCard({ paper, index, subjectName }: { paper: Paper; index: number; subjectName: string }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const isMain = paper.examType === "Main";
+  const examTypeLabel = normalizeExamTypeLabel(paper.examType);
+  const isMain = examTypeLabel === "Main";
   const hasPdf = !!paper.pdfPath;
   const [downloaded, setDownloaded] = useState<DownloadItem | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -104,7 +116,7 @@ function PaperCard({ paper, index, subjectName }: { paper: Paper; index: number;
     } else {
       Alert.alert(
         `${subjectName}`,
-        `${paper.month} ${paper.year} (${paper.examType} Exam)\n\nPaper PDF not uploaded yet. Stay tuned!`,
+        `${paper.month} ${paper.year} (${examTypeLabel} Exam)\n\nPaper PDF not uploaded yet. Stay tuned!`,
         [{ text: "OK" }]
       );
     }
@@ -123,7 +135,7 @@ function PaperCard({ paper, index, subjectName }: { paper: Paper; index: number;
         title: subjectName,
         year: paper.year,
         month: paper.month,
-        examType: paper.examType,
+        examType: examTypeLabel,
         remoteUrl: pdfUrl,
       });
       setDownloaded(item);
@@ -164,7 +176,7 @@ function PaperCard({ paper, index, subjectName }: { paper: Paper; index: number;
           <Text style={styles.paperTitle}>{paper.month} {paper.year}</Text>
           <View style={styles.paperMeta}>
             <View style={[styles.typeBadge, { backgroundColor: isMain ? colors.accent + '20' : colors.warning + '20' }]}>
-              <Text style={[styles.typeText, { color: isMain ? colors.accent : colors.warning }]}>{paper.examType}</Text>
+              <Text style={[styles.typeText, { color: isMain ? colors.accent : colors.warning }]}>{examTypeLabel}</Text>
             </View>
             {hasPdf ? (
               <View style={[styles.typeBadge, { backgroundColor: colors.accent + '20' }]}>
@@ -222,7 +234,7 @@ export default function SubjectScreen() {
   const insets = useSafeAreaInsets();
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const [activeTab, setActiveTab] = useState<TabType>("syllabus");
-  const [paperFilter, setPaperFilter] = useState<"All" | "Main" | "Supply" | "Back">("All");
+  const [paperFilter, setPaperFilter] = useState<"All" | "Main" | "Mid Sem">("All");
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [hasAccess, setHasAccess] = useState(false);
   const webTopInset = Platform.OS === "web" ? 67 : 0;
@@ -303,7 +315,7 @@ export default function SubjectScreen() {
   const papers = subject.papers || [];
   const filteredPapers = paperFilter === "All"
     ? papers
-    : papers.filter(p => p.examType === paperFilter);
+    : papers.filter(p => normalizeExamTypeLabel(p.examType) === paperFilter);
 
   const handleBookmark = () => {
     if (Platform.OS !== "web") {
@@ -419,7 +431,7 @@ export default function SubjectScreen() {
         ) : activeTab === "papers" ? (
           <View style={styles.contentList}>
             <View style={styles.filterRow}>
-              {(["All", "Main", "Supply", "Back"] as const).map(type => (
+              {(["All", "Main", "Mid Sem"] as const).map(type => (
                 <Pressable
                   key={type}
                   onPress={() => {

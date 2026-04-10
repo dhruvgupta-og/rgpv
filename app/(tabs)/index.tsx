@@ -65,7 +65,10 @@ function BranchCard({ branch }: { branch: Branch }) {
 function RecentPaperCard({ paper, subject }: { paper: Paper; subject?: Subject }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const isMain = paper.examType === "Main";
+  const examType = paper.examType === "Supply" || paper.examType === "Supplementary" || paper.examType === "Back"
+    ? "Mid Sem"
+    : paper.examType;
+  const isMain = examType === "Main";
 
   const handlePress = async () => {
     if (Platform.OS !== "web") {
@@ -103,7 +106,7 @@ function RecentPaperCard({ paper, subject }: { paper: Paper; subject?: Subject }
         </Text>
         <View style={styles.paperMetaRow}>
           <Text style={[styles.paperBadge, { color: isMain ? colors.accent : colors.warning }]}>
-            {paper.examType}
+            {examType}
           </Text>
           <Text style={styles.paperBadge}>{paper.pdfPath ? "PDF" : "Coming Soon"}</Text>
         </View>

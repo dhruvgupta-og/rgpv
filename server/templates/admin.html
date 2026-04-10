@@ -519,7 +519,7 @@
           <div class="form-group"><label>Year</label><input type="text" id="paper-year" placeholder="2024"></div>
           <div class="form-group"><label>Month</label><select id="paper-month"><option>Jan</option><option>Feb</option><option>Mar</option><option>Apr</option><option>May</option><option value="Jun">Jun</option><option>Jul</option><option>Aug</option><option>Sep</option><option>Oct</option><option>Nov</option><option value="Dec" selected>Dec</option></select></div>
         </div>
-        <div class="form-group"><label>Exam Type</label><select id="paper-type"><option value="Main">Main</option><option value="Supply">Supplementary</option><option value="Back">Back</option></select></div>
+        <div class="form-group"><label>Exam Type</label><select id="paper-type"><option value="Main">Main</option><option value="Mid Sem">Mid Sem</option></select></div>
         <div class="form-group"><label>Upload PDF (max 20MB)</label><input type="file" id="paper-pdf" accept="application/pdf" style="padding:8px;"></div>
         <div class="form-group"><label>Or paste PDF/Google Drive link</label><input type="text" id="paper-pdf-link" placeholder="https://drive.google.com/file/d/..."></div>
       </div>
@@ -641,6 +641,16 @@
       Array.from(select.options).forEach(option => {
         option.selected = values.has(option.value);
       });
+    }
+
+    function normalizeExamTypeLabel(value) {
+      const raw = String(value || '').trim().toLowerCase();
+      if (!raw) return 'Main';
+      if (raw === 'main') return 'Main';
+      if (raw === 'mid sem' || raw === 'midsem' || raw === 'mid-sem' || raw === 'supply' || raw === 'supplementary' || raw === 'back') {
+        return 'Mid Sem';
+      }
+      return String(value || '').trim();
     }
 
     function showSection(name) {
@@ -1092,14 +1102,15 @@
         }
         tbody.innerHTML = papers.map(p => {
           const subject = allSubjects.find(s => s.id === p.subjectId);
-          const typeBadge = p.examType === 'Main' ? 'badge-success' : 'badge-warning';
+          const examType = normalizeExamTypeLabel(p.examType);
+          const typeBadge = examType === 'Main' ? 'badge-success' : 'badge-warning';
           const pdfBadge = p.pdfPath ? `<span class="pdf-badge pdf-yes"><a href="${p.pdfPath}" target="_blank" style="color:inherit;text-decoration:none;">View PDF</a></span>` : '<span class="pdf-badge pdf-no">No PDF</span>';
           const previewBtn = p.pdfPath ? `<button class="btn btn-outline btn-sm" onclick="previewPdf('${p.pdfPath}')">Preview</button>` : '';
           return `<tr>
             <td>${subject ? formatSubjectLabel(subject) : p.subjectId}</td>
             <td>${p.year}</td>
             <td>${p.month}</td>
-            <td><span class="badge ${typeBadge}">${p.examType}</span></td>
+            <td><span class="badge ${typeBadge}">${examType}</span></td>
             <td>${p.views || 0}</td>
             <td>${pdfBadge}</td>
             <td class="actions-cell">
@@ -1130,7 +1141,7 @@
         : 'Create the same paper for multiple subjects across branches in one upload.';
       document.getElementById('paper-year').value = paper ? paper.year : new Date().getFullYear().toString();
       document.getElementById('paper-month').value = paper ? paper.month : 'Dec';
-      document.getElementById('paper-type').value = paper ? paper.examType : 'Main';
+      document.getElementById('paper-type').value = paper ? normalizeExamTypeLabel(paper.examType) : 'Main';
       document.getElementById('paper-pdf').value = '';
       document.getElementById('paper-pdf-link').value = paper?.pdfPath || '';
       openModal('paper-modal');
@@ -1201,7 +1212,7 @@
         </td>
         <td>
           <select data-field="examType" style="padding:6px 8px; background:var(--bg-light); border:1px solid var(--border); border-radius:6px; color:var(--text);">
-            ${["Main","Supply","Back"].map(t => `<option ${data.examType===t?'selected':''}>${t}</option>`).join('')}
+            ${["Main","Mid Sem"].map(t => `<option ${normalizeExamTypeLabel(data.examType)===t?'selected':''}>${t}</option>`).join('')}
           </select>
         </td>
         <td><input data-field="pdfPath" type="text" value="${data.pdfPath || ''}" placeholder="Drive link or PDF URL" style="min-width:260px;"></td>

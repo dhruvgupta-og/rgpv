@@ -611,6 +611,19 @@ function parseSubjectIdsInput(raw: any) {
     .filter(Boolean);
 }
 
+function normalizeExamType(raw?: string) {
+  const value = String(raw || "").trim().toLowerCase();
+  if (!value) return "Main";
+  if (value === "main") return "Main";
+  if (value === "mid sem" || value === "midsem" || value === "mid-sem" || value === "supply" || value === "supplementary" || value === "back") {
+    return "Mid Sem";
+  }
+  return value
+    .split(/\s+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 const csvUpload = multer({
   storage: multer.memoryStorage(),
   fileFilter: (_req, file, cb) => {
@@ -1258,7 +1271,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         subjectId: req.body.subjectId,
         year: req.body.year,
         month: req.body.month,
-        examType: req.body.examType || "Main",
+        examType: normalizeExamType(req.body.examType),
         pdfPath,
       });
       await storage.createAuditLog({
@@ -1293,7 +1306,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const pdfPath = req.file ? await uploadPdfToFirebase(req.file) : (pdfLink || null);
       const year = String(req.body.year || "").trim();
       const month = String(req.body.month || "").trim();
-      const examType = String(req.body.examType || "Main").trim() || "Main";
+      const examType = normalizeExamType(req.body.examType);
 
       if (!year || !month) {
         return res.status(400).json({ error: "Year and month are required" });
@@ -1324,7 +1337,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updateData: any = {};
       if (req.body.year) updateData.year = req.body.year;
       if (req.body.month) updateData.month = req.body.month;
-      if (req.body.examType) updateData.examType = req.body.examType;
+      if (req.body.examType) updateData.examType = normalizeExamType(req.body.examType);
       if (req.body.subjectId) updateData.subjectId = req.body.subjectId;
       if (req.file) {
         updateData.pdfPath = await uploadPdfToFirebase(req.file);
@@ -1588,7 +1601,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             subjectId,
             year: row[idx.year],
             month: row[idx.month],
-            examType: row[idx.examType] || "Main",
+            examType: normalizeExamType(row[idx.examType]),
             pdfPath: rawPath ? normalizePdfLink(rawPath) : undefined,
           };
           if (!data.subjectId || !data.year || !data.month) {
@@ -1626,7 +1639,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const subjectId = resolveSubjectId(item.subjectId || item.subjectCode || item.subjectName, lookup);
           const year = String(item.year || "").trim();
           const month = String(item.month || "").trim();
-          const examType = String(item.examType || "Main").trim() || "Main";
+          const examType = normalizeExamType(item.examType);
           const pdfPath = normalizePdfLink(String(item.pdfPath || "").trim());
           if (!subjectId || !year || !month || !pdfPath) {
             results.skipped++;
@@ -1799,7 +1812,7 @@ async function seedDatabase() {
 
   const papersData = [
     { subjectId: "cse-3-ds", year: "2024", month: "Dec", examType: "Main" },
-    { subjectId: "cse-3-ds", year: "2024", month: "Jun", examType: "Supply" },
+    { subjectId: "cse-3-ds", year: "2024", month: "Jun", examType: "Mid Sem" },
     { subjectId: "cse-3-ds", year: "2023", month: "Dec", examType: "Main" },
     { subjectId: "cse-4-os", year: "2024", month: "Dec", examType: "Main" },
     { subjectId: "cse-4-os", year: "2023", month: "Dec", examType: "Main" },
