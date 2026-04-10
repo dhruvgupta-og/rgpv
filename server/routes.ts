@@ -550,6 +550,21 @@ function normalizeSubjectId(rawId: string, branchId: string, semester: number, c
   return `${branchId}-${semester}-${base}`.replace(/--+/g, "-");
 }
 
+function generateSubjectCode(name: string) {
+  const words = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (!words.length) return "SUBJECT";
+
+  const initials = words.map((word) => word[0]).join("").toUpperCase();
+  if (initials.length >= 2 && initials.length <= 12) return initials;
+
+  const compact = words.join("").replace(/[^a-z0-9]/gi, "").toUpperCase();
+  return (compact || "SUBJECT").slice(0, 20);
+}
+
 function buildSubjectLookup(subjects: any[]) {
   const byId = new Map<string, any>();
   const byCode = new Map<string, any>();
@@ -1370,7 +1385,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const row of rows.slice(1)) {
         try {
           const name = (row[idx.name] || "").trim();
-          const code = (row[idx.code] || "").trim();
+          const code = ((idx.code >= 0 ? row[idx.code] : "") || "").trim() || generateSubjectCode(name);
           const branchId = normalizeBranchId(row[idx.branchId]);
           const semester = Number(row[idx.semester]);
           const id = normalizeSubjectId(row[idx.id], branchId, semester, code, name);
@@ -1427,6 +1442,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (rows.length < 2) return res.status(400).json({ error: "CSV must include header + data" });
       const header = rows[0].map(h => h.toLowerCase());
       const idx = {
+        subject: header.indexOf("subject"),
         subjectId: header.indexOf("subjectid"),
         subjectCode: header.indexOf("subjectcode"),
         subjectName: header.indexOf("subjectname"),
@@ -1442,8 +1458,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const row of rows.slice(1)) {
         try {
           const rawPath = idx.pdfPath >= 0 ? row[idx.pdfPath] : undefined;
+          const subjectLookupValue =
+            idx.subject >= 0
+              ? row[idx.subject]
+              : (idx.subjectName >= 0
+                  ? row[idx.subjectName]
+                  : (idx.subjectCode >= 0 ? row[idx.subjectCode] : row[idx.subjectId]));
           let subjectId = resolveSubjectId(
-            idx.subjectId >= 0 ? row[idx.subjectId] : (idx.subjectCode >= 0 ? row[idx.subjectCode] : row[idx.subjectName]),
+            subjectLookupValue,
             lookup
           );
           // Fall back to default subject if provided and no subject found in row

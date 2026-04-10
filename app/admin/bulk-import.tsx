@@ -80,7 +80,7 @@ export default function BulkImportPage() {
           Bulk Import
         </Text>
         <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", fontSize: 14 }}>
-          Upload subjects, syllabus, and papers without manually entering subject IDs.
+          Upload subjects, syllabus, and papers with subject names first, without manual IDs.
         </Text>
       </View>
 
@@ -104,7 +104,7 @@ export default function BulkImportPage() {
                 Upload Subjects CSV
               </Text>
               <Text style={{ color: "#fff", fontFamily: "Inter_400Regular", fontSize: 12, textAlign: "center" }}>
-                Subject ID is optional. Syllabus units can be included in the same file.
+                Code and ID are optional. Syllabus units can be included in the same file.
               </Text>
             </>
           )}
@@ -125,7 +125,7 @@ export default function BulkImportPage() {
           Papers CSV can match subjects automatically
         </Text>
         <Text style={{ color: colors.textMuted, fontFamily: "Inter_400Regular", fontSize: 12, lineHeight: 18 }}>
-          Use `subjectCode` or `subjectName` in the CSV. You do not need to pick a subject first.
+          Use `subjectName` in the CSV. `subject` or `subjectCode` also works if you already have it.
         </Text>
       </View>
 
@@ -149,7 +149,7 @@ export default function BulkImportPage() {
                 Upload Papers CSV
               </Text>
               <Text style={{ color: "#fff", fontFamily: "Inter_400Regular", fontSize: 12, textAlign: "center" }}>
-                Format: subjectCode or subjectName, year, month, examType, pdfPath
+                Format: subjectName, year, month, examType, pdfPath
               </Text>
             </>
           )}
@@ -167,9 +167,9 @@ export default function BulkImportPage() {
         }}
       >
         <Text style={{ color: colors.textMuted, fontFamily: "Inter_400Regular", fontSize: 11, lineHeight: 16 }}>
-          <Text style={{ color: colors.textSecondary, fontFamily: "Inter_600SemiBold" }}>Subjects CSV:</Text> name, code, branchId, semester{"\n"}
-          Optional: id, unit1_title, unit1_topics, unit2_title, unit2_topics...{"\n"}
-          <Text style={{ color: colors.textSecondary, fontFamily: "Inter_600SemiBold" }}>Papers CSV:</Text> subjectCode or subjectName, year, month, examType, pdfPath
+          <Text style={{ color: colors.textSecondary, fontFamily: "Inter_600SemiBold" }}>Subjects CSV:</Text> name, branchId, semester{"\n"}
+          Optional: code, id, unit1_title, unit1_topics, unit2_title, unit2_topics...{"\n"}
+          <Text style={{ color: colors.textSecondary, fontFamily: "Inter_600SemiBold" }}>Papers CSV:</Text> subjectName, year, month, examType, pdfPath
         </Text>
       </View>
 

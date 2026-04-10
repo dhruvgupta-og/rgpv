@@ -346,8 +346,8 @@
         <div class="card-header"><h3>Subjects + Syllabus CSV</h3></div>
         <div style="padding:16px 20px;">
           <p style="color:var(--text-muted); font-size:13px; margin-bottom:10px;">
-            Required: <code>name,code,branchId,semester</code><br>
-            Optional: <code>id</code>. If omitted, the subject ID is created automatically.<br>
+            Required: <code>name,branchId,semester</code><br>
+            Optional: <code>code</code> and <code>id</code>. If omitted, both are created automatically.<br>
             Optional syllabus: <code>unit1_title,unit1_topics,unit2_title,unit2_topics,...,unit8_title,unit8_topics</code><br>
             Topics can be separated by <code>|</code> or new lines.
           </p>
@@ -359,8 +359,8 @@
         <div class="card-header"><h3>Papers CSV</h3></div>
         <div style="padding:16px 20px;">
           <p style="color:var(--text-muted); font-size:13px; margin-bottom:10px;">
-            Format: <code>subjectCode or subjectName,year,month,examType,pdfPath(optional)</code><br>
-            Accepted headers: <code>subjectId</code>, <code>subjectCode</code>, or <code>subjectName</code>.<br>
+            Format: <code>subjectName,year,month,examType,pdfPath(optional)</code><br>
+            You can also use <code>subject</code> or <code>subjectCode</code> if needed.<br>
             You can paste a Google Drive share link in <code>pdfPath</code>.
           </p>
           <input type="file" id="papers-csv" accept=".csv" style="padding:8px;">
