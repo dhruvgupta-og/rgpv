@@ -233,15 +233,15 @@
     <!-- SYLLABUS -->
     <div id="section-syllabus" class="section">
       <div class="page-header">
-        <div><h1>Syllabus</h1><p>Manage unit-wise syllabus for subjects</p></div>
-        <button class="btn btn-primary" onclick="openSyllabusModal()">+ Add Unit</button>
+        <div><h1>Syllabus</h1><p>Manage and update syllabus subject-wise</p></div>
+        <button class="btn btn-primary" onclick="openSyllabusModal()">Edit Selected Subject</button>
       </div>
       <div style="margin-bottom:16px;">
         <select id="syllabus-subject-filter" onchange="loadSyllabus()" style="padding:8px 12px; background:var(--card); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:14px; min-width: 300px;">
           <option value="">Select a subject</option>
         </select>
       </div>
-      <div class="card"><table><thead><tr><th>Unit</th><th>Title</th><th>Topics</th><th>Actions</th></tr></thead><tbody id="syllabus-table"></tbody></table></div>
+      <div class="card"><table><thead><tr><th>Unit</th><th>Title</th><th>Topics</th></tr></thead><tbody id="syllabus-table"></tbody></table></div>
     </div>
 
     <!-- PAPERS -->
@@ -481,15 +481,17 @@
   <!-- SYLLABUS MODAL -->
   <div class="modal-overlay" id="syllabus-modal">
     <div class="modal">
-      <div class="modal-header"><h3 id="syllabus-modal-title">Add Syllabus Unit</h3><button class="modal-close" onclick="closeModal('syllabus-modal')">&times;</button></div>
+      <div class="modal-header"><h3 id="syllabus-modal-title">Edit Subject Syllabus</h3><button class="modal-close" onclick="closeModal('syllabus-modal')">&times;</button></div>
       <div class="modal-body">
-        <input type="hidden" id="syllabus-edit-id">
-        <div class="form-group"><label>Subject</label><select id="syllabus-subject"></select></div>
-        <div class="form-row">
-          <div class="form-group"><label>Unit Number</label><input type="number" id="syllabus-unit" min="1" max="10" value="1"></div>
-          <div class="form-group"><label>Unit Title</label><input type="text" id="syllabus-title" placeholder="Introduction"></div>
+        <div class="form-group">
+          <label>Subject</label>
+          <select id="syllabus-subject" onchange="loadSyllabusEditorSubject(this.value)"></select>
         </div>
-        <div class="form-group"><label>Topics (one per line)</label><textarea id="syllabus-topics" placeholder="Topic 1&#10;Topic 2&#10;Topic 3" rows="6"></textarea></div>
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
+          <p style="margin:0; color:var(--text-muted); font-size:14px;">Edit the full syllabus for a subject and save all units together.</p>
+          <button type="button" class="btn btn-outline" onclick="addSyllabusEditorUnit()">+ Add Unit</button>
+        </div>
+        <div id="syllabus-units-editor"></div>
       </div>
       <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('syllabus-modal')">Cancel</button><button class="btn btn-primary" onclick="saveSyllabus()">Save</button></div>
     </div>
@@ -600,6 +602,15 @@
       setTimeout(() => el.remove(), 3000);
     }
 
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     function showSection(name) {
       document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
       document.getElementById('section-' + name).classList.add('active');
@@ -608,11 +619,11 @@
       if (name === 'dashboard') loadDashboard();
       if (name === 'branches') loadBranches();
       if (name === 'subjects') loadSubjects();
-      if (name === 'syllabus') { populateSubjectDropdowns(); loadSyllabus(); }
-      if (name === 'papers') { populateSubjectDropdowns(); loadPapers(); }
-      if (name === 'quick-papers') { populateSubjectDropdowns(); initQuickPapers(); }
-      if (name === 'videos') { populateSubjectDropdowns(); loadVideos(); }
-      if (name === 'analyzer') { populateSubjectDropdowns(); loadAnalytics(); }
+      if (name === 'syllabus') { populateSubjectDropdowns().then(() => loadSyllabus()); }
+      if (name === 'papers') { populateSubjectDropdowns().then(() => loadPapers()); }
+      if (name === 'quick-papers') { populateSubjectDropdowns().then(() => initQuickPapers()); }
+      if (name === 'videos') { populateSubjectDropdowns().then(() => loadVideos()); }
+      if (name === 'analyzer') { populateSubjectDropdowns().then(() => loadAnalytics()); }
       if (name === 'imports') { /* no-op */ }
       if (name === 'audit') loadAudit();
       if (name === 'notify') loadNotifications();
@@ -830,7 +841,16 @@
     }
 
     function populateSubjectDropdowns() {
-      Promise.all([
+      const selectedSyllabusFilter = document.getElementById('syllabus-subject-filter')?.value || '';
+      const selectedSyllabusSubject = document.getElementById('syllabus-subject')?.value || '';
+      const selectedPaperFilter = document.getElementById('paper-subject-filter')?.value || '';
+      const selectedPaperSubject = document.getElementById('paper-subject')?.value || '';
+      const selectedVideoFilter = document.getElementById('video-subject-filter')?.value || '';
+      const selectedVideoSubject = document.getElementById('video-subject')?.value || '';
+      const selectedAnalyzerSubject = document.getElementById('analyzer-subject')?.value || '';
+      const selectedReassignTo = document.getElementById('reassign-to')?.value || '';
+
+      return Promise.all([
         allBranches.length ? Promise.resolve(allBranches) : api('/api/branches'),
         api('/api/subjects'),
       ]).then(([branches, subjects]) => {
@@ -848,70 +868,168 @@
         document.getElementById('reassign-from-options').innerHTML = subjects
           .map(s => `<option value="${formatSubjectLabel(s)}"></option>`)
           .join('');
+
+        document.getElementById('syllabus-subject-filter').value = subjects.some(s => s.id === selectedSyllabusFilter) ? selectedSyllabusFilter : '';
+        document.getElementById('syllabus-subject').value = subjects.some(s => s.id === selectedSyllabusSubject)
+          ? selectedSyllabusSubject
+          : (subjects[0]?.id || '');
+        document.getElementById('paper-subject-filter').value = subjects.some(s => s.id === selectedPaperFilter) ? selectedPaperFilter : '';
+        document.getElementById('paper-subject').value = subjects.some(s => s.id === selectedPaperSubject)
+          ? selectedPaperSubject
+          : (subjects[0]?.id || '');
+        document.getElementById('video-subject-filter').value = subjects.some(s => s.id === selectedVideoFilter) ? selectedVideoFilter : '';
+        document.getElementById('video-subject').value = subjects.some(s => s.id === selectedVideoSubject)
+          ? selectedVideoSubject
+          : (subjects[0]?.id || '');
+        document.getElementById('analyzer-subject').value = subjects.some(s => s.id === selectedAnalyzerSubject)
+          ? selectedAnalyzerSubject
+          : '';
+        document.getElementById('reassign-to').value = subjects.some(s => s.id === selectedReassignTo)
+          ? selectedReassignTo
+          : (subjects[0]?.id || '');
       });
     }
 
     async function loadSyllabus() {
       const subjectId = document.getElementById('syllabus-subject-filter').value;
       const tbody = document.getElementById('syllabus-table');
-      if (!subjectId) { tbody.innerHTML = '<tr><td colspan="4"><div class="empty-state"><p>Select a subject to view syllabus</p></div></td></tr>'; return; }
+      if (!subjectId) {
+        tbody.innerHTML = '<tr><td colspan="3"><div class="empty-state"><p>Select a subject to view syllabus</p></div></td></tr>';
+        return;
+      }
       try {
         const units = await api('/api/subjects/' + subjectId + '/syllabus');
         if (units.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="4"><div class="empty-state"><p>No syllabus units. Add one!</p></div></td></tr>';
+          tbody.innerHTML = '<tr><td colspan="3"><div class="empty-state"><p>No syllabus added for this subject yet. Use "Edit Selected Subject" to add it.</p></div></td></tr>';
           return;
         }
         tbody.innerHTML = units.map(u => `<tr>
           <td><strong>Unit ${u.unitNumber}</strong></td>
-          <td>${u.title}</td>
-          <td>${(u.topics || []).map(t => '<span class="topic-tag">' + t + '</span>').join(' ')}</td>
-          <td class="actions-cell">
-            <button class="btn btn-outline btn-sm" onclick='editSyllabus(${JSON.stringify(u)})'>Edit</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteSyllabus(${u.id})">Delete</button>
-          </td>
+          <td>${escapeHtml(u.title)}</td>
+          <td>${(u.topics || []).map(t => '<span class="topic-tag">' + escapeHtml(t) + '</span>').join(' ')}</td>
         </tr>`).join('');
       } catch (e) { toast(e.message, 'error'); }
     }
 
-    function openSyllabusModal(unit) {
-      document.getElementById('syllabus-modal-title').textContent = unit ? 'Edit Unit' : 'Add Unit';
-      document.getElementById('syllabus-edit-id').value = unit ? unit.id : '';
-      document.getElementById('syllabus-subject').value = unit ? unit.subjectId : (document.getElementById('syllabus-subject-filter').value || allSubjects[0]?.id || '');
-      document.getElementById('syllabus-unit').value = unit ? unit.unitNumber : '1';
-      document.getElementById('syllabus-title').value = unit ? unit.title : '';
-      document.getElementById('syllabus-topics').value = unit ? (unit.topics || []).join('\n') : '';
+    function getSyllabusEditorUnitMarkup(unit = {}) {
+      const title = escapeHtml(unit.title || '');
+      const topics = escapeHtml((unit.topics || []).join('\n'));
+      return `<div class="card syllabus-editor-unit" style="padding:16px; margin-bottom:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; flex-wrap:wrap;">
+          <strong class="syllabus-editor-label">Unit</strong>
+          <button type="button" class="btn btn-danger btn-sm" onclick="removeSyllabusEditorUnit(this)">Remove</button>
+        </div>
+        <input type="hidden" data-syllabus-field="unitNumber" value="${escapeHtml(unit.unitNumber || '')}">
+        <div class="form-group"><label>Unit Title</label><input type="text" data-syllabus-field="title" placeholder="Introduction" value="${title}"></div>
+        <div class="form-group"><label>Topics (one per line)</label><textarea data-syllabus-field="topics" rows="5" placeholder="Topic 1&#10;Topic 2&#10;Topic 3">${topics}</textarea></div>
+      </div>`;
+    }
+
+    function renumberSyllabusEditorUnits() {
+      document.querySelectorAll('#syllabus-units-editor .syllabus-editor-unit').forEach((unitEl, index) => {
+        unitEl.querySelector('.syllabus-editor-label').textContent = 'Unit ' + (index + 1);
+        unitEl.querySelector('[data-syllabus-field="unitNumber"]').value = String(index + 1);
+      });
+    }
+
+    function addSyllabusEditorUnit(unit = {}) {
+      const wrap = document.getElementById('syllabus-units-editor');
+      wrap.insertAdjacentHTML('beforeend', getSyllabusEditorUnitMarkup(unit));
+      renumberSyllabusEditorUnits();
+    }
+
+    function removeSyllabusEditorUnit(button) {
+      const unitCard = button.closest('.syllabus-editor-unit');
+      if (unitCard) unitCard.remove();
+      if (!document.querySelector('#syllabus-units-editor .syllabus-editor-unit')) {
+        addSyllabusEditorUnit();
+      } else {
+        renumberSyllabusEditorUnits();
+      }
+    }
+
+    function renderSyllabusEditorUnits(units = []) {
+      const wrap = document.getElementById('syllabus-units-editor');
+      wrap.innerHTML = '';
+      if (!units.length) {
+        addSyllabusEditorUnit();
+        return;
+      }
+      units
+        .slice()
+        .sort((a, b) => (Number(a.unitNumber) || 0) - (Number(b.unitNumber) || 0))
+        .forEach(unit => addSyllabusEditorUnit(unit));
+      renumberSyllabusEditorUnits();
+    }
+
+    async function loadSyllabusEditorSubject(subjectId) {
+      const wrap = document.getElementById('syllabus-units-editor');
+      if (!subjectId) {
+        wrap.innerHTML = '<div class="empty-state"><p>Select a subject to edit syllabus</p></div>';
+        document.getElementById('syllabus-modal-title').textContent = 'Edit Subject Syllabus';
+        return;
+      }
+      const subject = allSubjects.find(s => s.id === subjectId);
+      document.getElementById('syllabus-modal-title').textContent = subject
+        ? `Edit Syllabus: ${subject.code} - ${subject.name}`
+        : 'Edit Subject Syllabus';
+      wrap.innerHTML = '<div class="empty-state"><p>Loading syllabus...</p></div>';
+      try {
+        const units = await api('/api/subjects/' + subjectId + '/syllabus');
+        renderSyllabusEditorUnits(units);
+      } catch (e) {
+        wrap.innerHTML = '';
+        toast(e.message, 'error');
+      }
+    }
+
+    async function openSyllabusModal(subjectId) {
+      const selectedSubjectId = subjectId || document.getElementById('syllabus-subject-filter').value || allSubjects[0]?.id || '';
+      if (!selectedSubjectId) {
+        toast('Add a subject first', 'error');
+        return;
+      }
+      document.getElementById('syllabus-subject').value = selectedSubjectId;
+      await loadSyllabusEditorSubject(selectedSubjectId);
       openModal('syllabus-modal');
     }
 
-    function editSyllabus(unit) { openSyllabusModal(unit); }
-
     async function saveSyllabus() {
-      const editId = document.getElementById('syllabus-edit-id').value;
-      const data = {
-        subjectId: document.getElementById('syllabus-subject').value,
-        unitNumber: parseInt(document.getElementById('syllabus-unit').value),
-        title: document.getElementById('syllabus-title').value.trim(),
-        topics: document.getElementById('syllabus-topics').value.split('\n').map(t => t.trim()).filter(Boolean),
-      };
-      if (!data.subjectId || !data.title) { toast('Fill all required fields', 'error'); return; }
-      try {
-        if (editId) {
-          await api('/api/syllabus/' + editId, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-          toast('Unit updated');
-        } else {
-          await api('/api/syllabus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-          toast('Unit created');
-        }
-        closeModal('syllabus-modal');
-        loadSyllabus();
-      } catch (e) { toast(e.message, 'error'); }
-    }
+      const subjectId = document.getElementById('syllabus-subject').value;
+      if (!subjectId) { toast('Select a subject', 'error'); return; }
 
-    async function deleteSyllabus(id) {
-      if (!confirm('Delete this syllabus unit?')) return;
+      const unitCards = Array.from(document.querySelectorAll('#syllabus-units-editor .syllabus-editor-unit'));
+      const units = [];
+
+      for (const [index, unitCard] of unitCards.entries()) {
+        const title = unitCard.querySelector('[data-syllabus-field="title"]').value.trim();
+        const topics = unitCard.querySelector('[data-syllabus-field="topics"]').value
+          .split('\n')
+          .map(t => t.trim())
+          .filter(Boolean);
+
+        if (!title && topics.length === 0) continue;
+        if (!title) {
+          toast(`Unit ${index + 1} needs a title`, 'error');
+          return;
+        }
+
+        units.push({
+          unitNumber: index + 1,
+          title,
+          topics,
+        });
+      }
+
       try {
-        await api('/api/syllabus/' + id, { method: 'DELETE' });
-        toast('Unit deleted');
+        await api('/api/subjects/' + subjectId + '/syllabus', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ units }),
+        });
+        toast('Syllabus updated');
+        document.getElementById('syllabus-subject-filter').value = subjectId;
+        closeModal('syllabus-modal');
         loadSyllabus();
       } catch (e) { toast(e.message, 'error'); }
     }

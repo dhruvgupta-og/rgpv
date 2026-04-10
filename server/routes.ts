@@ -1045,6 +1045,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put("/api/subjects/:subjectId/syllabus", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const subjectId = req.params.subjectId;
+      const subject = await storage.getSubject(subjectId);
+      if (!subject) return res.status(404).json({ error: "Subject not found" });
+
+      const units = Array.isArray(req.body?.units) ? req.body.units : [];
+      const normalizedUnits = units
+        .map((unit: any, index: number) => ({
+          unitNumber: Number(unit?.unitNumber) || index + 1,
+          title: String(unit?.title || "").trim(),
+          topics: Array.isArray(unit?.topics)
+            ? unit.topics.map((topic: any) => String(topic || "").trim()).filter(Boolean)
+            : [],
+        }))
+        .filter((unit: any) => unit.title);
+
+      const updatedUnits = await storage.replaceSyllabusUnits(subjectId, normalizedUnits);
+      await storage.createAuditLog({
+        userId: (req as any).adminUser?.id,
+        action: "update",
+        entity: "syllabus",
+        entityId: subjectId,
+        details: { subjectId, units: normalizedUnits },
+        ip: req.ip,
+      });
+      res.json(updatedUnits);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.post("/api/syllabus", requireAdmin, async (req: Request, res: Response) => {
     try {
       const unit = await storage.createSyllabusUnit(req.body);

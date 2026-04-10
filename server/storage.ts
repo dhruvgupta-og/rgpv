@@ -124,6 +124,29 @@ export const storage = {
     await db.collection("syllabusUnits").doc(String(id)).delete();
   },
 
+  async replaceSyllabusUnits(subjectId: string, units: any[]) {
+    const existing = await db.collection("syllabusUnits").where("subjectId", "==", subjectId).get();
+    const batch = db.batch();
+
+    existing.docs.forEach((doc) => batch.delete(doc.ref));
+
+    units.forEach((unit, index) => {
+      const id = makeId() + index;
+      const payload = {
+        id,
+        subjectId,
+        unitNumber: unit.unitNumber,
+        title: unit.title,
+        topics: Array.isArray(unit.topics) ? unit.topics : [],
+      };
+
+      batch.set(db.collection("syllabusUnits").doc(String(id)), payload);
+    });
+
+    await batch.commit();
+    return this.getSyllabusUnits(subjectId);
+  },
+
   // ---- PAPERS ----
   async getPapers(subjectId: string) {
     const snap = await db.collection("papers").where("subjectId", "==", subjectId).orderBy("year").get();
