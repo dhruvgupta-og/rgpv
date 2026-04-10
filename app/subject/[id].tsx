@@ -20,7 +20,7 @@ function normalizeExamTypeLabel(value?: string) {
   const raw = String(value || "").trim().toLowerCase();
   if (!raw) return "Main";
   if (raw === "main") return "Main";
-  if (raw === "mid sem" || raw === "midsem" || raw === "mid-sem" || raw === "supply" || raw === "supplementary" || raw === "back") {
+  if (raw === "mid sem" || raw === "midsem" || raw === "mid-sem" || raw === "supply" || raw === "supplementary") {
     return "Mid Sem";
   }
   return String(value || "").trim();
@@ -948,4 +948,3 @@ function makeStyles(colors: ReturnType<typeof useTheme>["colors"]) {
     sectionLabel: { ...baseStyles.sectionLabel, color: colors.text },
   });
 }
-
