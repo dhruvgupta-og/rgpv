@@ -2,6 +2,7 @@ import * as SecureStore from "expo-secure-store";
 import { v4 as uuidv4 } from "uuid";
 import * as Device from "expo-device";
 import Constants from "expo-constants";
+import { getApiUrl } from "./query-client";
 
 // Storage keys
 const SESSION_ID_KEY = "analytics_session_id";
@@ -58,7 +59,7 @@ class Analytics {
 
   private async trackSessionStart() {
     try {
-      await fetch("/api/analytics/session-start", {
+      await fetch(getApiUrl() + "api/analytics/session-start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -98,7 +99,7 @@ class Analytics {
     this.pageStartTime = Date.now();
 
     try {
-      await fetch("/api/analytics/page-view", {
+      await fetch(getApiUrl() + "api/analytics/page-view", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -118,7 +119,7 @@ class Analytics {
     if (!this.isInitialized) await this.initialize();
 
     try {
-      await fetch("/api/analytics/interaction", {
+      await fetch(getApiUrl() + "api/analytics/interaction", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -140,7 +141,7 @@ class Analytics {
     if (!this.isInitialized) await this.initialize();
 
     try {
-      await fetch("/api/analytics/content-view", {
+      await fetch(getApiUrl() + "api/analytics/content-view", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -162,7 +163,7 @@ class Analytics {
 
     try {
       const duration = Date.now() - this.sessionStartTime;
-      await fetch("/api/analytics/session-end", {
+      await fetch(getApiUrl() + "api/analytics/session-end", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -196,7 +197,7 @@ class Analytics {
       const eventsToSend = [...this.eventQueue];
       this.eventQueue = [];
 
-      await fetch("/api/analytics/batch", {
+      await fetch(getApiUrl() + "api/analytics/batch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ events: eventsToSend }),

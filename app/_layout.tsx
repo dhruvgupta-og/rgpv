@@ -25,6 +25,8 @@ import { getStoredProfile, isStoredProfileComplete } from "@/lib/profile-storage
 import { UpdatesProvider } from "@/lib/updates";
 import * as Updates from "expo-updates";
 import { UpdatePrompt } from "@/components/UpdatePrompt";
+import { analytics } from "@/lib/analytics";
+import { useSegments } from "expo-router";
 
 
 WebBrowser.maybeCompleteAuthSession();
@@ -258,6 +260,19 @@ async function registerForPushNotifications() {
   });
 }
 
+function AnalyticsListener() {
+  const pathname = usePathname();
+  const segments = useSegments();
+
+  useEffect(() => {
+    // Determine a clean screen name
+    const screenName = segments.length > 0 ? segments.join("/") : "home";
+    analytics.trackPageView(screenName, pathname).catch(() => {});
+  }, [pathname, segments]);
+
+  return null;
+}
+
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -295,6 +310,7 @@ export default function RootLayout() {
               <BookmarksProvider>
                 <ThemeProvider>
                   <ThemedStatusBar />
+                  <AnalyticsListener />
                   <AuthGate />
                   <UpdatePrompt />
                 </ThemeProvider>
