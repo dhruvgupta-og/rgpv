@@ -4,7 +4,7 @@ import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
-import { ActivityIndicator, Platform, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, Text, View, AppState } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -21,6 +21,7 @@ import * as ScreenCapture from "expo-screen-capture";
 import * as AuthSession from "expo-auth-session";
 import Constants from "expo-constants";
 import { getStoredProfile, isStoredProfileComplete } from "@/lib/profile-storage";
+import { analytics } from "@/lib/analytics";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -59,6 +60,8 @@ function AuthGate() {
   const [authReady, setAuthReady] = React.useState(false);
   const [profileReady, setProfileReady] = React.useState(false);
   const [profileComplete, setProfileComplete] = React.useState(true);
+  const appStateRef = React.useRef(AppState.currentState);
+  const screenStartTimeRef = React.useRef(Date.now());
   const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || undefined;
   const googleAndroidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || undefined;
   const isExpoGo = Constants.appOwnership === "expo" || Constants.executionEnvironment === "storeClient";
@@ -154,6 +157,28 @@ function AuthGate() {
       router.replace("/profile");
     }
   }, [user, pathname, router]);
+
+  // Track page views
+  React.useEffect(() => {
+    analytics.trackPageView(pathname, pathname).catch(() => {});
+  }, [pathname]);
+
+  // Handle app state changes for session tracking
+  React.useEffect(() => {
+    const subscription = AppState.addEventListener("change", handleAppStateChange);
+    return () => subscription.remove();
+  }, []);
+
+  const handleAppStateChange = async (state: string) => {
+    if (appStateRef.current.match(/inactive|background/) && state === "active") {
+      // App has come to foreground
+      analytics.initialize().catch(() => {});
+    } else if (state.match(/inactive|background/)) {
+      // App has gone to background
+      analytics.endSession().catch(() => {});
+    }
+    appStateRef.current = state;
+  };
 
   if (user) {
     return (
@@ -274,6 +299,12 @@ export default function RootLayout() {
   useEffect(() => {
     if (fontsLoaded && Platform.OS !== "web") {
       ScreenCapture.preventScreenCaptureAsync().catch(() => {});
+    }
+  }, [fontsLoaded]);
+
+  useEffect(() => {
+    if (fontsLoaded) {
+      analytics.initialize().catch(() => {});
     }
   }, [fontsLoaded]);
 

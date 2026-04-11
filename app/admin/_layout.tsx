@@ -44,6 +44,7 @@ export default function AdminLayout() {
     >
       <Stack.Screen name="index" />
       <Stack.Screen name="bulk-import" />
+      <Stack.Screen name="user-analytics/[deviceId]" />
     </Stack>
   );
 }

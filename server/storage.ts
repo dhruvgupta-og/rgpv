@@ -478,4 +478,217 @@ export const storage = {
     await batch.commit();
     return refs.size;
   },
+
+  // ---- USER ANALYTICS ----
+  async trackSessionStart(data: any) {
+    const id = makeId().toString();
+    const payload = { ...data, id, startedAt: now() };
+    await db.collection("userSessions").doc(id).set(payload);
+    return payload;
+  },
+
+  async trackSessionEnd(sessionId: string, totalDurationMs: number) {
+    const snap = await db.collection("userSessions").where("sessionId", "==", sessionId).limit(1).get();
+    if (snap.empty) return null;
+    const ref = snap.docs[0].ref;
+    const payload = { endedAt: now(), totalDurationMs };
+    await ref.set(payload, { merge: true });
+    const updated = await ref.get();
+    return updated.data();
+  },
+
+  async trackPageView(data: any) {
+    const id = makeId().toString();
+    const payload = { ...data, id, viewedAt: now() };
+    await db.collection("pageViews").doc(id).set(payload);
+    return payload;
+  },
+
+  async trackInteraction(data: any) {
+    const id = makeId().toString();
+    const payload = { ...data, id, interactedAt: now() };
+    await db.collection("userInteractions").doc(id).set(payload);
+    return payload;
+  },
+
+  async trackContentView(data: any) {
+    const id = makeId().toString();
+    const payload = { ...data, id, viewedAt: now() };
+    await db.collection("contentViews").doc(id).set(payload);
+    return payload;
+  },
+
+  async getAnalyticsOverview() {
+    const now = new Date();
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    // Active users last 24 hours
+    const sessionsLast24 = await db
+      .collection("userSessions")
+      .where("startedAt", ">=", oneDayAgo.toISOString())
+      .get();
+
+    // Active users last 7 days
+    const sessionsLast7 = await db
+      .collection("userSessions")
+      .where("startedAt", ">=", sevenDaysAgo.toISOString())
+      .get();
+
+    // Total sessions
+    const allSessions = await db.collection("userSessions").get();
+
+    // Page views
+    const pageViewsSnap = await db.collection("pageViews").get();
+
+    // Top pages
+    const pageViewsData = pageViewsSnap.docs.map((d) => d.data());
+    const pageViewsMap = new Map<string, number>();
+    pageViewsData.forEach((pv) => {
+      const screen = pv.screen || "unknown";
+      pageViewsMap.set(screen, (pageViewsMap.get(screen) || 0) + 1);
+    });
+    const topPages = Array.from(pageViewsMap.entries())
+      .map(([screen, count]) => ({ screen, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    // Average session duration
+    const sessionDurations = allSessions.docs.map((d) => d.data().totalDurationMs || 0).filter((d) => d > 0);
+    const avgSessionDuration = sessionDurations.length > 0 ? Math.round(sessionDurations.reduce((a, b) => a + b, 0) / sessionDurations.length) : 0;
+
+    // Content views
+    const contentViewsSnap = await db.collection("contentViews").get();
+    const contentViewsData = contentViewsSnap.docs.map((d) => d.data());
+    const contentViewsMap = new Map<string, number>();
+    contentViewsData.forEach((cv) => {
+      const contentType = cv.contentType || "unknown";
+      contentViewsMap.set(contentType, (contentViewsMap.get(contentType) || 0) + 1);
+    });
+
+    // Interactions
+    const interactionsSnap = await db.collection("userInteractions").get();
+    const interactionsData = interactionsSnap.docs.map((d) => d.data());
+    const interactionsMap = new Map<string, number>();
+    interactionsData.forEach((i) => {
+      const type = i.interactionType || "unknown";
+      interactionsMap.set(type, (interactionsMap.get(type) || 0) + 1);
+    });
+
+    return {
+      activeUsers24h: new Set(sessionsLast24.docs.map((d) => d.data().deviceId)).size,
+      activeUsers7d: new Set(sessionsLast7.docs.map((d) => d.data().deviceId)).size,
+      totalSessions: allSessions.size,
+      totalPageViews: pageViewsSnap.size,
+      totalContentViews: contentViewsSnap.size,
+      totalInteractions: interactionsSnap.size,
+      topPages,
+      avgSessionDurationMs: avgSessionDuration,
+      contentViewsByType: Object.fromEntries(contentViewsMap),
+      interactionsByType: Object.fromEntries(interactionsMap),
+    };
+  },
+
+  async getUserAnalytics(deviceId: string) {
+    const sessionsSnap = await db.collection("userSessions").where("deviceId", "==", deviceId).get();
+    const pageViewsSnap = await db.collection("pageViews").where("deviceId", "==", deviceId).get();
+    const contentViewsSnap = await db.collection("contentViews").where("deviceId", "==", deviceId).get();
+    const interactionsSnap = await db.collection("userInteractions").where("deviceId", "==", deviceId).get();
+
+    const sessions = sessionsSnap.docs.map((d) => d.data());
+    const pageViews = pageViewsSnap.docs.map((d) => d.data());
+    const contentViews = contentViewsSnap.docs.map((d) => d.data());
+    const interactions = interactionsSnap.docs.map((d) => d.data());
+
+    // Total time spent
+    const totalTimeMs = sessions.reduce((sum, s) => sum + (s.totalDurationMs || 0), 0);
+
+    // Page views by screen
+    const pageViewsByScreen = new Map<string, number>();
+    pageViews.forEach((pv) => {
+      const screen = pv.screen || "unknown";
+      pageViewsByScreen.set(screen, (pageViewsByScreen.get(screen) || 0) + 1);
+    });
+
+    // Content views
+    const contentViewsByType = new Map<string, number>();
+    contentViews.forEach((cv) => {
+      const type = cv.contentType || "unknown";
+      contentViewsByType.set(type, (contentViewsByType.get(type) || 0) + 1);
+    });
+
+    // Interactions
+    const interactionsByType = new Map<string, number>();
+    interactions.forEach((i) => {
+      const type = i.interactionType || "unknown";
+      interactionsByType.set(type, (interactionsByType.get(type) || 0) + 1);
+    });
+
+    return {
+      deviceId,
+      totalSessions: sessions.length,
+      totalTimeSpentMs: totalTimeMs,
+      avgSessionDurationMs: sessions.length > 0 ? Math.round(totalTimeMs / sessions.length) : 0,
+      totalPageViews: pageViews.length,
+      totalContentViews: contentViews.length,
+      totalInteractions: interactions.length,
+      pageViewsByScreen: Object.fromEntries(pageViewsByScreen),
+      contentViewsByType: Object.fromEntries(contentViewsByType),
+      interactionsByType: Object.fromEntries(interactionsByType),
+      sessions,
+      recentPageViews: pageViews.slice(-20).reverse(),
+      recentContentViews: contentViews.slice(-20).reverse(),
+    };
+  },
+
+  async getAllUserAnalytics(limit: number = 100) {
+    const sessionsSnap = await db.collection("userSessions").limit(limit * 10).get();
+    const uniqueDevices = new Set<string>();
+    sessionsSnap.docs.forEach((d) => uniqueDevices.add(d.data().deviceId));
+
+    const users = await Promise.all(
+      Array.from(uniqueDevices).map((deviceId) => this.getUserAnalytics(deviceId)),
+    );
+
+    return users.slice(0, limit).sort((a, b) => b.totalTimeSpentMs - a.totalTimeSpentMs);
+  },
+
+  async getScreenTimeAnalytics() {
+    const sessionsSnap = await db.collection("userSessions").get();
+    const pageViewsSnap = await db.collection("pageViews").get();
+
+    const sessions = sessionsSnap.docs.map((d) => d.data());
+    const pageViews = pageViewsSnap.docs.map((d) => d.data());
+
+    // Screen time distribution by screen
+    const screenTimeMap = new Map<string, number>();
+    pageViews.forEach((pv) => {
+      const screen = pv.screen || "unknown";
+      const duration = pv.durationMs || 0;
+      screenTimeMap.set(screen, (screenTimeMap.get(screen) || 0) + duration);
+    });
+
+    // Total time spent
+    const totalTime = sessions.reduce((sum, s) => sum + (s.totalDurationMs || 0), 0);
+
+    // Calculate percentages
+    const screenTimeByScreen: Record<string, any> = {};
+    screenTimeMap.forEach((duration, screen) => {
+      screenTimeByScreen[screen] = {
+        timeMs: duration,
+        timeMinutes: Math.round(duration / 60000),
+        percentage: totalTime > 0 ? Math.round((duration / totalTime) * 100) : 0,
+      };
+    });
+
+    return {
+      totalTimeMs: totalTime,
+      totalTimeMinutes: Math.round(totalTime / 60000),
+      totalTimeHours: Math.round(totalTime / 3600000),
+      screenTimeByScreen: Object.fromEntries(
+        Object.entries(screenTimeByScreen).sort((a, b) => (b[1] as any).timeMs - (a[1] as any).timeMs),
+      ),
+      uniqueDevicesCount: new Set(sessions.map((s) => s.deviceId)).size,
+    };
+  },
 };

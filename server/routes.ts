@@ -707,6 +707,132 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ---- ANALYTICS ----
+  app.post("/api/analytics/session-start", async (req: Request, res: Response) => {
+    try {
+      const { deviceId, sessionId, appVersion, osVersion, deviceModel } = req.body || {};
+      if (!deviceId || !sessionId) return res.status(400).json({ error: "deviceId and sessionId required" });
+      const saved = await storage.trackSessionStart({
+        deviceId,
+        sessionId,
+        appVersion,
+        osVersion,
+        deviceModel,
+      });
+      res.json({ success: true, id: saved.id });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/analytics/session-end", async (req: Request, res: Response) => {
+    try {
+      const { sessionId, totalDurationMs } = req.body || {};
+      if (!sessionId) return res.status(400).json({ error: "sessionId required" });
+      const updated = await storage.trackSessionEnd(sessionId, totalDurationMs || 0);
+      res.json({ success: true, updated });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/analytics/page-view", async (req: Request, res: Response) => {
+    try {
+      const { deviceId, sessionId, page, screen, durationMs, metadata } = req.body || {};
+      if (!deviceId || !sessionId || !screen) return res.status(400).json({ error: "deviceId, sessionId, and screen required" });
+      const saved = await storage.trackPageView({
+        deviceId,
+        sessionId,
+        page: page || screen,
+        screen,
+        durationMs: durationMs || 0,
+        metadata: metadata || {},
+      });
+      res.json({ success: true, id: saved.id });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/analytics/interaction", async (req: Request, res: Response) => {
+    try {
+      const { deviceId, sessionId, interactionType, screen, targetId, targetType, metadata } = req.body || {};
+      if (!deviceId || !sessionId || !interactionType || !screen) {
+        return res.status(400).json({ error: "deviceId, sessionId, interactionType, and screen required" });
+      }
+      const saved = await storage.trackInteraction({
+        deviceId,
+        sessionId,
+        interactionType,
+        screen,
+        targetId,
+        targetType,
+        metadata: metadata || {},
+      });
+      res.json({ success: true, id: saved.id });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/analytics/content-view", async (req: Request, res: Response) => {
+    try {
+      const { deviceId, sessionId, contentType, contentId, contentName, durationMs, metadata } = req.body || {};
+      if (!deviceId || !sessionId || !contentType || !contentId) {
+        return res.status(400).json({ error: "deviceId, sessionId, contentType, and contentId required" });
+      }
+      const saved = await storage.trackContentView({
+        deviceId,
+        sessionId,
+        contentType,
+        contentId,
+        contentName,
+        durationMs: durationMs || 0,
+        metadata: metadata || {},
+      });
+      res.json({ success: true, id: saved.id });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/admin/analytics/overview", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const overview = await storage.getAnalyticsOverview();
+      res.json(overview);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/admin/analytics/users", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const limit = Number(req.query.limit || 100);
+      const users = await storage.getAllUserAnalytics(Math.min(limit, 500));
+      res.json(users);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/admin/analytics/users/:deviceId", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const analytics = await storage.getUserAnalytics(req.params.deviceId);
+      res.json(analytics);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/admin/analytics/screen-time", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const analytics = await storage.getScreenTimeAnalytics();
+      res.json(analytics);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // ---- PUSH TOKENS ----
   app.post("/api/push/register", async (req: Request, res: Response) => {
     try {

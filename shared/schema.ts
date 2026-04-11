@@ -100,6 +100,53 @@ export const profiles = pgTable("profiles", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const userSessions = pgTable("user_sessions", {
+  id: serial("id").primaryKey(),
+  deviceId: varchar("device_id", { length: 100 }).notNull(),
+  sessionId: varchar("session_id", { length: 100 }).notNull().unique(),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  endedAt: timestamp("ended_at"),
+  totalDurationMs: integer("total_duration_ms").default(0),
+  appVersion: varchar("app_version", { length: 20 }),
+  osVersion: varchar("os_version", { length: 50 }),
+  deviceModel: varchar("device_model", { length: 100 }),
+});
+
+export const pageViews = pgTable("page_views", {
+  id: serial("id").primaryKey(),
+  deviceId: varchar("device_id", { length: 100 }).notNull(),
+  sessionId: varchar("session_id", { length: 100 }).notNull(),
+  page: varchar("page", { length: 100 }).notNull(),
+  screen: varchar("screen", { length: 100 }).notNull(),
+  viewedAt: timestamp("viewed_at").defaultNow().notNull(),
+  durationMs: integer("duration_ms").default(0),
+  metadata: jsonb("metadata"),
+});
+
+export const userInteractions = pgTable("user_interactions", {
+  id: serial("id").primaryKey(),
+  deviceId: varchar("device_id", { length: 100 }).notNull(),
+  sessionId: varchar("session_id", { length: 100 }).notNull(),
+  interactionType: varchar("interaction_type", { length: 50 }).notNull(),
+  screen: varchar("screen", { length: 100 }).notNull(),
+  targetId: varchar("target_id", { length: 100 }),
+  targetType: varchar("target_type", { length: 50 }),
+  interactedAt: timestamp("interacted_at").defaultNow().notNull(),
+  metadata: jsonb("metadata"),
+});
+
+export const contentViews = pgTable("content_views", {
+  id: serial("id").primaryKey(),
+  deviceId: varchar("device_id", { length: 100 }).notNull(),
+  sessionId: varchar("session_id", { length: 100 }).notNull(),
+  contentType: varchar("content_type", { length: 50 }).notNull(),
+  contentId: varchar("content_id", { length: 100 }).notNull(),
+  contentName: text("content_name"),
+  viewedAt: timestamp("viewed_at").defaultNow().notNull(),
+  durationMs: integer("duration_ms").default(0),
+  metadata: jsonb("metadata"),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -114,6 +161,11 @@ export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: tru
 export const insertPushTokenSchema = createInsertSchema(pushTokens).omit({ id: true, createdAt: true, lastSeenAt: true });
 export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });
 export const insertProfileSchema = createInsertSchema(profiles).omit({ id: true, createdAt: true, updatedAt: true });
+
+export const insertUserSessionSchema = createInsertSchema(userSessions).omit({ id: true, startedAt: true });
+export const insertPageViewSchema = createInsertSchema(pageViews).omit({ id: true, viewedAt: true });
+export const insertUserInteractionSchema = createInsertSchema(userInteractions).omit({ id: true, interactedAt: true });
+export const insertContentViewSchema = createInsertSchema(contentViews).omit({ id: true, viewedAt: true });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -133,3 +185,11 @@ export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Profile = typeof profiles.$inferSelect;
 export type InsertProfile = z.infer<typeof insertProfileSchema>;
+export type UserSession = typeof userSessions.$inferSelect;
+export type InsertUserSession = z.infer<typeof insertUserSessionSchema>;
+export type PageView = typeof pageViews.$inferSelect;
+export type InsertPageView = z.infer<typeof insertPageViewSchema>;
+export type UserInteraction = typeof userInteractions.$inferSelect;
+export type InsertUserInteraction = z.infer<typeof insertUserInteractionSchema>;
+export type ContentView = typeof contentViews.$inferSelect;
+export type InsertContentView = z.infer<typeof insertContentViewSchema>;
