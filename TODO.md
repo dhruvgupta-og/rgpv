@@ -1,14 +1,15 @@
-# Bulk CSV ID Removal Task
+# Admin Analytics Enhancement Progress
 
-## Steps:
-- [x] 1. Edit ../CS405_Operating_Systems_Syllabus.csv - remove id column
-- [x] 2. Edit ../RGPV_BTech_Sem1_2.csv - remove id column  
-- [x] 3. Edit ../RGPV_BTech_Sem1_2_CSE.csv - remove id column
-- [x] 4. Edit ../RGPV_BTech_Sem5_8_CSE.csv - remove id column
-- [x] 5. Edit ../rgpv_cse_subjects.csv - remove id column
-- [x] 6. Edit ../rgpv_sem1_sem2_subjects.csv - remove id column
-- [x] 7. Edit ../rgpv_sem1_sem2_with_units.csv - remove id column
-- [x] 8. Verify all edits via read_file samples
-- [ ] 9. Test bulk import functionality
+**OTA Integration (Complete)**
+- [x] lib/updates.tsx & app/_layout.tsx integration
+- [x] expo-updates installed & tested
 
-**Status: Edits verified. CSVs now ready for bulk import (IDs removed from first column).**
+**Admin Analytics Dashboard (In Progress)**
+- [ ] Add "User Analytics" card to app/admin/index.tsx (link to users list → detail page)
+- [ ] Create app/admin/user-analytics/index.tsx (users overview table with screen time sorting)
+- [ ] Enhance user-analytics/[deviceId].tsx with charts (session timeline, screen time pie, profile data)
+- [ ] Backend: Ensure storage.getAllUserAnalytics returns profile-joined data (name/branch/year if available)
+- [ ] Add global analytics overview page (app/admin/analytics)
+- [ ] Test with sample data generation
+
+**Follow-up:** Installations complete, test `npx expo start`, generate test data, build APK.

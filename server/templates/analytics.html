@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics - RGPV Papers Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+        }
+
+        .container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: 280px;
+            background: #1e293b;
+            padding: 24px;
+            border-right: 1px solid #334155;
+            overflow-y: auto;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 32px;
+            font-size: 18px;
+            font-weight: 700;
+            color: #0ea5e9;
+        }
+
+        .nav-item {
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: #cbd5e1;
+            text-decoration: none;
+            border: none;
+            background: transparent;
+            font-size: 14px;
+            width: 100%;
+            text-align: left;
+        }
+
+        .nav-item:hover, .nav-item.active {
+            background: #334155;
+            color: #0ea5e9;
+        }
+
+        .main {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .header {
+            background: #1e293b;
+            padding: 20px 40px;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            color: #f1f5f9;
+        }
+
+        .header-subtitle {
+            font-size: 13px;
+            color: #94a3b8;
+            margin-top: 4px;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .stat-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #f1f5f9;
+            margin-bottom: 4px;
+        }
+
+        .stat-subtitle {
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        .section {
+            margin-bottom: 40px;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #f1f5f9;
+            margin-bottom: 16px;
+        }
+
+        .chart-container {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #334155;
+        }
+
+        .list-item:last-child {
+            border-bottom: none;
+        }
+
+        .list-item-name {
+            color: #f1f5f9;
+            font-weight: 500;
+        }
+
+        .list-item-value {
+            color: #0ea5e9;
+            font-weight: 600;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #334155;
+            border-radius: 2px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #0ea5e9, #06b6d4);
+            border-radius: 2px;
+            transition: width 0.3s;
+        }
+
+        .user-item {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .user-item:hover {
+            border-color: #0ea5e9;
+            background: #1e293b;
+        }
+
+        .user-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 8px;
+        }
+
+        .user-name {
+            font-weight: 600;
+            color: #f1f5f9;
+        }
+
+        .user-stats {
+            display: flex;
+            gap: 20px;
+            margin-top: 8px;
+            font-size: 13px;
+        }
+
+        .user-stat {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .user-stat-label {
+            color: #94a3b8;
+            margin-bottom: 2px;
+        }
+
+        .user-stat-value {
+            color: #0ea5e9;
+            font-weight: 600;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #94a3b8;
+        }
+
+        .error {
+            background: #7f1d1d;
+            border: 1px solid #991b1b;
+            color: #fca5a5;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .refresh-btn {
+            padding: 8px 16px;
+            background: #0ea5e9;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .refresh-btn:hover {
+            background: #0284c7;
+        }
+
+        .logout-btn {
+            padding: 8px 16px;
+            background: transparent;
+            color: #cbd5e1;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .logout-btn:hover {
+            background: #334155;
+            color: #ef4444;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <div class="logo">
+                📊 RGPV Papers Admin
+            </div>
+            <nav>
+                <button class="nav-item active" onclick="navigateTo('analytics')">📈 Analytics</button>
+                <button class="nav-item" onclick="navigateTo('content')">📚 Content</button>
+                <button class="nav-item" onclick="navigateTo('users')">👥 Users</button>
+                <button class="nav-item" onclick="logout()">🚪 Logout</button>
+            </nav>
+        </div>
+
+        <div class="main">
+            <div class="header">
+                <div>
+                    <h1 id="pageTitle">Analytics</h1>
+                    <div class="header-subtitle" id="pageSubtitle">Overview of your RGPV Papers data</div>
+                </div>
+                <div class="header-actions">
+                    <button class="refresh-btn" onclick="loadAnalytics()">🔄 Refresh</button>
+                    <button class="logout-btn" onclick="logout()">Logout</button>
+                </div>
+            </div>
+
+            <div class="content">
+                <div id="error" style="display: none;" class="error"></div>
+                <div id="loading" class="loading">Loading analytics...</div>
+                <div id="analyticsContent" style="display: none;">
+                    <!-- Overview Stats -->
+                    <div class="stat-grid">
+                        <div class="stat-card">
+                            <div class="stat-label">Active Users (24h)</div>
+                            <div class="stat-value" id="activeUsers24">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Active Users (7d)</div>
+                            <div class="stat-value" id="activeUsers7">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Total Sessions</div>
+                            <div class="stat-value" id="totalSessions">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Avg Session Duration</div>
+                            <div class="stat-value" id="avgSessionDuration">0s</div>
+                        </div>
+                    </div>
+
+                    <div class="stat-grid">
+                        <div class="stat-card">
+                            <div class="stat-label">Total Page Views</div>
+                            <div class="stat-value" id="totalPageViews">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Total Content Views</div>
+                            <div class="stat-value" id="totalContentViews">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Total Interactions</div>
+                            <div class="stat-value" id="totalInteractions">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Unique Devices</div>
+                            <div class="stat-value" id="uniqueDevices">0</div>
+                        </div>
+                    </div>
+
+                    <!-- Top Pages -->
+                    <div class="section">
+                        <div class="section-title">Top Pages</div>
+                        <div class="chart-container">
+                            <div id="topPagesContainer"></div>
+                        </div>
+                    </div>
+
+                    <!-- Screen Time -->
+                    <div class="section">
+                        <div class="section-title">Screen Time by Page</div>
+                        <div class="chart-container">
+                            <div id="screenTimeContainer"></div>
+                        </div>
+                    </div>
+
+                    <!-- Content Views -->
+                    <div class="section">
+                        <div class="section-title">Content Views by Type</div>
+                        <div class="chart-container">
+                            <div id="contentViewsContainer"></div>
+                        </div>
+                    </div>
+
+                    <!-- Interactions -->
+                    <div class="section">
+                        <div class="section-title">Interactions by Type</div>
+                        <div class="chart-container">
+                            <div id="interactionsContainer"></div>
+                        </div>
+                    </div>
+
+                    <!-- Top Users -->
+                    <div class="section">
+                        <div class="section-title">Top Users by Screen Time</div>
+                        <div id="topUsersContainer"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '';
+
+        async function loadAnalytics() {
+            const loadingEl = document.getElementById('loading');
+            const contentEl = document.getElementById('analyticsContent');
+            const errorEl = document.getElementById('error');
+
+            loadingEl.style.display = 'block';
+            contentEl.style.display = 'none';
+            errorEl.style.display = 'none';
+
+            try {
+                const [overview, screenTime, users] = await Promise.all([
+                    fetch(`${API_BASE}/api/admin/analytics/overview`).then(r => r.json()),
+                    fetch(`${API_BASE}/api/admin/analytics/screen-time`).then(r => r.json()),
+                    fetch(`${API_BASE}/api/admin/analytics/users?limit=10`).then(r => r.json())
+                ]);
+
+                renderAnalytics(overview, screenTime, users);
+                loadingEl.style.display = 'none';
+                contentEl.style.display = 'block';
+            } catch (error) {
+                errorEl.style.display = 'block';
+                errorEl.textContent = 'Failed to load analytics: ' + error.message;
+                loadingEl.style.display = 'none';
+            }
+        }
+
+        function formatMs(ms) {
+            const hours = Math.floor(ms / 3600000);
+            const minutes = Math.floor((ms % 3600000) / 60000);
+            const seconds = Math.floor((ms % 60000) / 1000);
+
+            if (hours > 0) return `${hours}h ${minutes}m`;
+            if (minutes > 0) return `${minutes}m ${seconds}s`;
+            return `${seconds}s`;
+        }
+
+        function renderAnalytics(overview, screenTime, users) {
+            // Overview stats
+            document.getElementById('activeUsers24').textContent = overview.activeUsers24h;
+            document.getElementById('activeUsers7').textContent = overview.activeUsers7d;
+            document.getElementById('totalSessions').textContent = overview.totalSessions;
+            document.getElementById('avgSessionDuration').textContent = formatMs(overview.avgSessionDurationMs);
+            document.getElementById('totalPageViews').textContent = overview.totalPageViews;
+            document.getElementById('totalContentViews').textContent = overview.totalContentViews;
+            document.getElementById('totalInteractions').textContent = overview.totalInteractions;
+            document.getElementById('uniqueDevices').textContent = screenTime.uniqueDevicesCount;
+
+            // Top pages
+            const topPagesHtml = overview.topPages.length > 0
+                ? overview.topPages.map(page => `
+                    <div class="list-item">
+                        <div>
+                            <div class="list-item-name">${escapeHtml(page.screen)}</div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: ${Math.min((page.count / Math.max(...overview.topPages.map(p => p.count), 1)) * 100, 100)}%"></div>
+                            </div>
+                        </div>
+                        <div class="list-item-value">${page.count}</div>
+                    </div>
+                `).join('')
+                : '<div style="color: #64748b; padding: 12px 0;">No data</div>';
+            document.getElementById('topPagesContainer').innerHTML = topPagesHtml;
+
+            // Screen time
+            const screenTimeHtml = Object.entries(screenTime.screenTimeByScreen).length > 0
+                ? Object.entries(screenTime.screenTimeByScreen)
+                    .sort((a, b) => b[1].timeMs - a[1].timeMs)
+                    .map(([screen, data]) => `
+                        <div class="list-item">
+                            <div>
+                                <div class="list-item-name">${escapeHtml(screen)}</div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: ${data.percentage}%"></div>
+                                </div>
+                            </div>
+                            <div class="list-item-value">${data.timeMinutes}m (${data.percentage}%)</div>
+                        </div>
+                    `).join('')
+                : '<div style="color: #64748b; padding: 12px 0;">No data</div>';
+            document.getElementById('screenTimeContainer').innerHTML = screenTimeHtml;
+
+            // Content views
+            const contentViewsHtml = Object.entries(overview.contentViewsByType).length > 0
+                ? Object.entries(overview.contentViewsByType)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([type, count]) => `
+                        <div class="list-item">
+                            <div class="list-item-name">${escapeHtml(type)}</div>
+                            <div class="list-item-value">${count} views</div>
+                        </div>
+                    `).join('')
+                : '<div style="color: #64748b; padding: 12px 0;">No data</div>';
+            document.getElementById('contentViewsContainer').innerHTML = contentViewsHtml;
+
+            // Interactions
+            const interactionsHtml = Object.entries(overview.interactionsByType).length > 0
+                ? Object.entries(overview.interactionsByType)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([type, count]) => `
+                        <div class="list-item">
+                            <div class="list-item-name">${escapeHtml(type)}</div>
+                            <div class="list-item-value">${count}</div>
+                        </div>
+                    `).join('')
+                : '<div style="color: #64748b; padding: 12px 0;">No data</div>';
+            document.getElementById('interactionsContainer').innerHTML = interactionsHtml;
+
+            // Top users
+            const topUsersHtml = users.length > 0
+                ? users.map(user => `
+                    <div class="user-item">
+                        <div class="user-header">
+                            <div class="user-name">Device: ${user.deviceId.substring(0, 12)}...</div>
+                        </div>
+                        <div style="color: #94a3b8; font-size: 12px; margin-bottom: 8px;">
+                            ${user.totalSessions} sessions • ${formatMs(user.totalTimeSpentMs)} total time
+                        </div>
+                        <div class="user-stats">
+                            <div class="user-stat">
+                                <div class="user-stat-label">Page Views</div>
+                                <div class="user-stat-value">${user.totalPageViews}</div>
+                            </div>
+                            <div class="user-stat">
+                                <div class="user-stat-label">Content Views</div>
+                                <div class="user-stat-value">${user.totalContentViews}</div>
+                            </div>
+                            <div class="user-stat">
+                                <div class="user-stat-label">Interactions</div>
+                                <div class="user-stat-value">${user.totalInteractions}</div>
+                            </div>
+                            <div class="user-stat">
+                                <div class="user-stat-label">Avg Duration</div>
+                                <div class="user-stat-value">${formatMs(user.avgSessionDurationMs)}</div>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')
+                : '<div style="color: #64748b; padding: 12px;">No users yet</div>';
+            document.getElementById('topUsersContainer').innerHTML = topUsersHtml;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function navigateTo(page) {
+            // Update active nav
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // For now, just reload analytics
+            if (page === 'analytics') {
+                loadAnalytics();
+            }
+        }
+
+        async function logout() {
+            if (confirm('Are you sure you want to logout?')) {
+                try {
+                    await fetch(`${API_BASE}/api/admin/logout`, { method: 'POST' });
+                    window.location.href = '/';
+                } catch (error) {
+                    console.error('Logout failed:', error);
+                }
+            }
+        }
+
+        // Load analytics on page load
+        window.addEventListener('load', loadAnalytics);
+
+        // Auto-refresh every 30 seconds
+        setInterval(loadAnalytics, 30000);
+    </script>
+</body>
+</html>
