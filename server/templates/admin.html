@@ -728,6 +728,7 @@
           api('/api/branches'), api('/api/subjects'), api('/api/papers')
         ]);
         allBranches = branches; allSubjects = subjects; allPapers = papers;
+        populateBranchFilters();
         document.getElementById('stat-branches').textContent = branches.length;
         document.getElementById('stat-subjects').textContent = subjects.length;
         document.getElementById('stat-papers').textContent = papers.length;
@@ -947,6 +948,7 @@
       ]).then(([branches, subjects]) => {
         allBranches = branches;
         allSubjects = subjects;
+        populateBranchFilters();
         const opts = subjects.map(s => `<option value="${s.id}">${formatSubjectLabel(s)}</option>`).join('');
         document.getElementById('syllabus-subject-filter').innerHTML = '<option value="">Select a subject</option>' + opts;
         document.getElementById('syllabus-subject').innerHTML = opts;
