@@ -22,6 +22,10 @@ function NativeTabLayout() {
         <Icon sf={{ default: "bell", selected: "bell.fill" }} />
         <Label>Alerts</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="events">
+        <Icon sf={{ default: "calendar", selected: "calendar" }} />
+        <Label>Events</Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="profile">
         <Icon sf={{ default: "person", selected: "person.fill" }} />
         <Label>Profile</Label>
@@ -85,6 +89,15 @@ function ClassicTabLayout() {
           title: "Alerts",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="notifications" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="events"
+        options={{
+          title: "Events",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="calendar" size={size} color={color} />
           ),
         }}
       />

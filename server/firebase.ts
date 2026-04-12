@@ -30,7 +30,9 @@ function initFirebase() {
 
 export function getFirestore() {
   initFirebase();
-  return getAdminFirestore();
+  const db = getAdminFirestore();
+  db.settings({ ignoreUndefinedProperties: true });
+  return db;
 }
 
 export function getStorageBucket() {
