@@ -706,6 +706,97 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: e.message });
     }
   });
+  // ---- EVENTS (public read, admin write) ----
+  app.get("/api/events", async (_req: Request, res: Response) => {
+    try {
+      const data = await storage.getAllEvents();
+      res.json(data);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/events/:id", async (req: Request, res: Response) => {
+    try {
+      const event = await storage.getEvent(req.params.id);
+      if (!event) return res.status(404).json({ error: "Not found" });
+      res.json(event);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/events", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const event = await storage.createEvent(req.body);
+      await storage.createAuditLog({ userId: (req as any).adminUser?.id, action: "create", entity: "event", entityId: event.id, details: req.body, ip: req.ip });
+      res.status(201).json(event);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.put("/api/events/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const event = await storage.updateEvent(req.params.id, req.body);
+      if (!event) return res.status(404).json({ error: "Not found" });
+      await storage.createAuditLog({ userId: (req as any).adminUser?.id, action: "update", entity: "event", entityId: req.params.id, details: req.body, ip: req.ip });
+      res.json(event);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete("/api/events/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      await storage.deleteEvent(req.params.id);
+      await storage.createAuditLog({ userId: (req as any).adminUser?.id, action: "delete", entity: "event", entityId: req.params.id, ip: req.ip });
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ---- EVENT REGISTRATIONS ----
+  app.get("/api/events/:eventId/registrations", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const data = await storage.getEventRegistrations(req.params.eventId);
+      res.json(data);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/events/:eventId/registrations/export.csv", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const event = await storage.getEvent(req.params.eventId) as any;
+      const regs = await storage.getEventRegistrations(req.params.eventId) as any[];
+      if (!regs.length) return res.status(204).send();
+      const fields = event?.registrationFields?.map((f: any) => f.label) || [];
+      const header = ["#", "Registered At", ...fields];
+      const rows = regs.map((r, i) => [
+        i + 1,
+        r.createdAt ? new Date(r.createdAt).toLocaleString("en-IN") : "",
+        ...fields.map((f: string) => r.fields?.[f] ?? ""),
+      ]);
+      const csv = "\uFEFF" + [header, ...rows].map(row => row.map(csvEscape).join(",")).join("\n");
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="registrations-${req.params.eventId}.csv"`);
+      res.send(csv);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/events/:eventId/register", async (req: Request, res: Response) => {
+    try {
+      const event = await storage.getEvent(req.params.eventId) as any;
+      if (!event) return res.status(404).json({ error: "Event not found" });
+      if (event.maxRegistrations && event.registrationCount >= event.maxRegistrations) {
+        return res.status(400).json({ error: "Event is full" });
+      }
+      const identifier = req.body.identifier || req.body.fields?.Email || req.body.fields?.Phone || "";
+      if (identifier) {
+        const already = await storage.checkEventRegistration(req.params.eventId, identifier);
+        if (already) return res.status(409).json({ error: "Already registered" });
+      }
+      const reg = await storage.createEventRegistration(req.params.eventId, { ...req.body, identifier });
+      res.status(201).json(reg);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete("/api/events/:eventId/registrations/:regId", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      await storage.deleteEventRegistration(req.params.regId);
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
 
   // ---- ANALYTICS ----
   app.post("/api/analytics/session-start", async (req: Request, res: Response) => {

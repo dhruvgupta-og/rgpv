@@ -188,11 +188,110 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
       <span>User Analytics</span>
     </div>
+    <div class="nav-item" onclick="showSection('events')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <span>Events</span>
+    </div>
     <div class="sidebar-footer">
       <button class="btn btn-outline" onclick="doLogout()">Logout</button>
     </div>
   </div>
   <div class="main">
+    <!-- EVENTS -->
+    <div id="section-events" class="section">
+      <div class="page-header">
+        <div><h1>Events</h1><p>Manage college events and registrations</p></div>
+        <button class="btn btn-primary" onclick="openEventModal(null)">+ Add Event</button>
+      </div>
+      <div id="events-list"><div class="empty-state"><p>Loading events...</p></div></div>
+
+      <!-- Event Modal -->
+      <div class="modal" id="event-modal" style="display:none;">
+        <div class="modal-content" style="max-width:600px;">
+          <div class="modal-header">
+            <h2 id="event-modal-title">Add Event</h2>
+            <button class="modal-close" onclick="closeEventModal()">×</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Title *</label>
+                <input id="ev-title" class="form-control" placeholder="Event title" />
+              </div>
+              <div class="form-group">
+                <label>Type</label>
+                <select id="ev-type" class="form-control">
+                  <option>Workshop</option>
+                  <option>Seminar</option>
+                  <option>Cultural</option>
+                  <option>Sports</option>
+                  <option>Hackathon</option>
+                  <option>Fest</option>
+                  <option>Deadline</option>
+                  <option>Other</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Description</label>
+              <textarea id="ev-desc" class="form-control" rows="3" placeholder="Event description..."></textarea>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Date *</label>
+                <input id="ev-date" type="date" class="form-control" />
+              </div>
+              <div class="form-group">
+                <label>End Date (optional)</label>
+                <input id="ev-enddate" type="date" class="form-control" />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Location</label>
+                <input id="ev-location" class="form-control" placeholder="Venue / Online" />
+              </div>
+              <div class="form-group">
+                <label>Max Registrations (0 = unlimited)</label>
+                <input id="ev-maxreg" type="number" class="form-control" value="0" min="0" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Registration Open?</label>
+              <select id="ev-regopen" class="form-control">
+                <option value="true">Yes - Accept Registrations</option>
+                <option value="false">No - View Only</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Registration Fields (what info to collect from users)</label>
+              <div id="reg-fields-list"></div>
+              <button class="btn btn-outline" style="margin-top:8px;" onclick="addRegField()">+ Add Field</button>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeEventModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveEvent()">Save Event</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Registrations Modal -->
+      <div class="modal" id="reg-modal" style="display:none;">
+        <div class="modal-content" style="max-width:800px;">
+          <div class="modal-header">
+            <h2 id="reg-modal-title">Registrations</h2>
+            <button class="modal-close" onclick="document.getElementById('reg-modal').style.display='none'">×</button>
+          </div>
+          <div class="modal-body">
+            <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+              <a id="reg-export-link" href="#" class="btn btn-outline" target="_blank">⬇ Export CSV</a>
+            </div>
+            <div id="reg-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
     <!-- USER ANALYTICS -->
     <div id="section-analytics" class="section">
       <div class="page-header">
@@ -713,6 +812,7 @@
       if (name === 'videos') { populateSubjectDropdowns().then(() => loadVideos()); }
       if (name === 'analyzer') { populateSubjectDropdowns().then(() => loadAnalytics()); }
       if (name === 'analytics') loadAnalyticsOverview();
+      if (name === 'events') loadEvents();
       if (name === 'imports') { /* no-op */ }
       if (name === 'audit') loadAudit();
       if (name === 'notify') loadNotifications();
@@ -1736,6 +1836,176 @@
     checkSession().then(() => {
       if (isAuthed) loadDashboard();
     });
+
+    // ---- EVENTS ----
+    let editingEventId = null;
+
+    async function loadEvents() {
+      const events = await api('/api/events');
+      const wrap = document.getElementById('events-list');
+      if (!events.length) {
+        wrap.innerHTML = '<div class="empty-state"><p>No events yet. Click "+ Add Event" to create one.</p></div>';
+        return;
+      }
+      wrap.innerHTML = `
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr>
+              <th>Title</th><th>Type</th><th>Date</th><th>Location</th><th>Registrations</th><th>Status</th><th>Actions</th>
+            </tr></thead>
+            <tbody>${events.map(ev => `
+              <tr>
+                <td><strong>${htmlEsc(ev.title)}</strong></td>
+                <td><span class="badge">${htmlEsc(ev.type || 'Event')}</span></td>
+                <td>${ev.date || '—'}</td>
+                <td>${htmlEsc(ev.location || '—')}</td>
+                <td>
+                  <button class="btn btn-sm btn-outline" onclick="viewRegistrations('${ev.id}', '${htmlEsc(ev.title)}')">
+                    ${ev.registrationCount || 0} registrations
+                  </button>
+                </td>
+                <td>${ev.registrationOpen === false ? '<span style="color:var(--text-muted)">Closed</span>' : '<span style="color:var(--accent)">Open</span>'}</td>
+                <td style="display:flex;gap:6px;">
+                  <button class="btn btn-sm btn-outline" onclick="openEventModal(${JSON.stringify(ev).replace(/"/g, '&quot;')})">Edit</button>
+                  <button class="btn btn-sm" style="background:var(--danger,#EF4444);color:#fff;" onclick="deleteEvent('${ev.id}')">Delete</button>
+                </td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    }
+
+    function htmlEsc(str) {
+      return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function openEventModal(event) {
+      editingEventId = event ? event.id : null;
+      document.getElementById('event-modal-title').textContent = event ? 'Edit Event' : 'Add Event';
+      document.getElementById('ev-title').value = event?.title || '';
+      document.getElementById('ev-desc').value = event?.description || '';
+      document.getElementById('ev-date').value = event?.date || '';
+      document.getElementById('ev-enddate').value = event?.endDate || '';
+      document.getElementById('ev-location').value = event?.location || '';
+      document.getElementById('ev-maxreg').value = event?.maxRegistrations || 0;
+      document.getElementById('ev-regopen').value = (event?.registrationOpen === false) ? 'false' : 'true';
+      const typeEl = document.getElementById('ev-type');
+      if (event?.type) typeEl.value = event.type;
+      // Render registration fields
+      const fieldsList = document.getElementById('reg-fields-list');
+      fieldsList.innerHTML = '';
+      (event?.registrationFields || []).forEach(f => addRegField(f));
+      document.getElementById('event-modal').style.display = 'flex';
+    }
+
+    function closeEventModal() {
+      document.getElementById('event-modal').style.display = 'none';
+      editingEventId = null;
+    }
+
+    let fieldIdx = 0;
+    function addRegField(field) {
+      const idx = fieldIdx++;
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:8px;';
+      wrap.innerHTML = `
+        <input class="form-control reg-field-label" placeholder="Field label (e.g. Name)" value="${htmlEsc(field?.label||'')}" style="flex:2;"/>
+        <select class="form-control reg-field-type" style="flex:1;">
+          ${['text','email','phone','number','select'].map(t => `<option value="${t}" ${field?.type===t?'selected':''}>${t}</option>`).join('')}
+        </select>
+        <label style="display:flex;align-items:center;gap:4px;white-space:nowrap;">
+          <input type="checkbox" class="reg-field-required" ${field?.required?'checked':''}/> Required
+        </label>
+        <button class="btn btn-sm" style="background:var(--danger,#EF4444);color:#fff;" onclick="this.parentNode.remove()">✕</button>
+      `;
+      document.getElementById('reg-fields-list').appendChild(wrap);
+    }
+
+    async function saveEvent() {
+      const title = document.getElementById('ev-title').value.trim();
+      if (!title) return toast('Title is required', 'error');
+      const date = document.getElementById('ev-date').value;
+      if (!date) return toast('Date is required', 'error');
+      // Collect registration fields
+      const fieldRows = document.querySelectorAll('#reg-fields-list > div');
+      const registrationFields = [];
+      fieldRows.forEach(row => {
+        const label = row.querySelector('.reg-field-label').value.trim();
+        const type = row.querySelector('.reg-field-type').value;
+        const required = row.querySelector('.reg-field-required').checked;
+        if (label) registrationFields.push({ label, type, required });
+      });
+      const payload = {
+        title,
+        description: document.getElementById('ev-desc').value.trim(),
+        date,
+        endDate: document.getElementById('ev-enddate').value || null,
+        location: document.getElementById('ev-location').value.trim(),
+        maxRegistrations: Number(document.getElementById('ev-maxreg').value) || 0,
+        registrationOpen: document.getElementById('ev-regopen').value === 'true',
+        type: document.getElementById('ev-type').value,
+        registrationFields,
+      };
+      try {
+        if (editingEventId) {
+          await api('/api/events/' + editingEventId, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+          toast('Event updated!');
+        } else {
+          await api('/api/events', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+          toast('Event created!');
+        }
+        closeEventModal();
+        loadEvents();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function deleteEvent(id) {
+      if (!confirm('Delete this event and all its registrations?')) return;
+      try {
+        await api('/api/events/' + id, { method: 'DELETE' });
+        toast('Event deleted');
+        loadEvents();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function viewRegistrations(eventId, title) {
+      document.getElementById('reg-modal-title').textContent = `Registrations — ${title}`;
+      document.getElementById('reg-export-link').href = `/api/events/${eventId}/registrations/export.csv`;
+      document.getElementById('reg-list').innerHTML = '<p>Loading...</p>';
+      document.getElementById('reg-modal').style.display = 'flex';
+      try {
+        const regs = await api(`/api/events/${eventId}/registrations`);
+        if (!regs.length) {
+          document.getElementById('reg-list').innerHTML = '<p style="color:var(--text-muted)">No registrations yet.</p>';
+          return;
+        }
+        // Build dynamic table from first registration keys
+        const fields = Object.keys(regs[0].fields || {});
+        document.getElementById('reg-list').innerHTML = `
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>#</th>${fields.map(f=>`<th>${htmlEsc(f)}</th>`).join('')}<th>Registered At</th><th></th></tr></thead>
+              <tbody>${regs.map((r, i) => `
+                <tr>
+                  <td>${i+1}</td>
+                  ${fields.map(f=>`<td>${htmlEsc(r.fields?.[f]??'')}</td>`).join('')}
+                  <td>${r.createdAt ? new Date(r.createdAt).toLocaleString('en-IN') : '—'}</td>
+                  <td><button class="btn btn-sm" style="background:var(--danger,#EF4444);color:#fff;" onclick="deleteReg('${eventId}','${r.id}')">✕</button></td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>`;
+      } catch (e) { document.getElementById('reg-list').innerHTML = `<p style="color:red">${e.message}</p>`; }
+    }
+
+    async function deleteReg(eventId, regId) {
+      if (!confirm('Remove this registration?')) return;
+      try {
+        await api(`/api/events/${eventId}/registrations/${regId}`, { method: 'DELETE' });
+        toast('Registration removed');
+        viewRegistrations(eventId, document.getElementById('reg-modal-title').textContent.replace('Registrations — ',''));
+      } catch(e) { toast(e.message,'error'); }
+    }
   </script>
 </body>
 </html>

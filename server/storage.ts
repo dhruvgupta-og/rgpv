@@ -691,4 +691,88 @@ export const storage = {
       uniqueDevicesCount: new Set(sessions.map((s) => s.deviceId)).size,
     };
   },
+
+  // ---- EVENTS ----
+  async getAllEvents() {
+    const snap = await db.collection("events").orderBy("date", "desc").get();
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  },
+
+  async getEvent(id: string) {
+    const doc = await db.collection("events").doc(id).get();
+    if (!doc.exists) return undefined;
+    return { id: doc.id, ...doc.data() };
+  },
+
+  async createEvent(data: any) {
+    const ref = db.collection("events").doc();
+    const payload = {
+      ...data,
+      id: ref.id,
+      registrationCount: 0,
+      createdAt: now(),
+      updatedAt: now(),
+    };
+    await ref.set(payload);
+    return payload;
+  },
+
+  async updateEvent(id: string, data: any) {
+    const ref = db.collection("events").doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return undefined;
+    const updated = { ...data, id, updatedAt: now() };
+    await ref.set(updated, { merge: true });
+    return { id, ...snap.data(), ...updated };
+  },
+
+  async deleteEvent(id: string) {
+    // delete all registrations too
+    const regs = await db.collection("eventRegistrations").where("eventId", "==", id).get();
+    const batch = db.batch();
+    regs.docs.forEach((d) => batch.delete(d.ref));
+    batch.delete(db.collection("events").doc(id));
+    await batch.commit();
+  },
+
+  // ---- EVENT REGISTRATIONS ----
+  async getEventRegistrations(eventId: string) {
+    const snap = await db.collection("eventRegistrations").where("eventId", "==", eventId).orderBy("createdAt", "desc").get();
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  },
+
+  async createEventRegistration(eventId: string, data: any) {
+    const ref = db.collection("eventRegistrations").doc();
+    const payload = { ...data, id: ref.id, eventId, createdAt: now() };
+    await ref.set(payload);
+    // increment count
+    await db.collection("events").doc(eventId).set(
+      { registrationCount: FieldValue.increment(1) },
+      { merge: true }
+    );
+    return payload;
+  },
+
+  async deleteEventRegistration(id: string) {
+    const doc = await db.collection("eventRegistrations").doc(id).get();
+    if (!doc.exists) return;
+    const eventId = doc.data()?.eventId;
+    await db.collection("eventRegistrations").doc(id).delete();
+    if (eventId) {
+      await db.collection("events").doc(eventId).set(
+        { registrationCount: FieldValue.increment(-1) },
+        { merge: true }
+      );
+    }
+  },
+
+  async checkEventRegistration(eventId: string, identifier: string) {
+    // identifier is usually phone or email
+    const snap = await db.collection("eventRegistrations")
+      .where("eventId", "==", eventId)
+      .where("identifier", "==", identifier)
+      .limit(1)
+      .get();
+    return !snap.empty;
+  },
 };
