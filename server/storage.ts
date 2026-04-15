@@ -100,8 +100,10 @@ export const storage = {
 
   // ---- SYLLABUS ----
   async getSyllabusUnits(subjectId: string) {
-    const snap = await db.collection("syllabusUnits").where("subjectId", "==", subjectId).orderBy("unitNumber").get();
-    return snap.docs.map((d) => d.data());
+    const snap = await db.collection("syllabusUnits").where("subjectId", "==", subjectId).get();
+    return snap.docs
+      .map((d) => d.data())
+      .sort((a, b) => Number(a.unitNumber || 0) - Number(b.unitNumber || 0));
   },
 
   async createSyllabusUnit(data: any) {
@@ -149,8 +151,10 @@ export const storage = {
 
   // ---- PAPERS ----
   async getPapers(subjectId: string) {
-    const snap = await db.collection("papers").where("subjectId", "==", subjectId).orderBy("year").get();
-    return snap.docs.map((d) => d.data());
+    const snap = await db.collection("papers").where("subjectId", "==", subjectId).get();
+    return snap.docs
+      .map((d) => d.data())
+      .sort((a, b) => String(a.year || "").localeCompare(String(b.year || "")));
   },
 
   async getAllPapers() {
@@ -211,8 +215,10 @@ export const storage = {
 
   // ---- VIDEOS ----
   async getVideos(subjectId: string) {
-    const snap = await db.collection("videos").where("subjectId", "==", subjectId).orderBy("createdAt", "desc").get();
-    return snap.docs.map((d) => d.data());
+    const snap = await db.collection("videos").where("subjectId", "==", subjectId).get();
+    return snap.docs
+      .map((d) => d.data())
+      .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
   },
 
   async createVideo(data: any) {
@@ -737,8 +743,10 @@ export const storage = {
 
   // ---- EVENT REGISTRATIONS ----
   async getEventRegistrations(eventId: string) {
-    const snap = await db.collection("eventRegistrations").where("eventId", "==", eventId).orderBy("createdAt", "desc").get();
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const snap = await db.collection("eventRegistrations").where("eventId", "==", eventId).get();
+    return snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
   },
 
   async createEventRegistration(eventId: string, data: any) {

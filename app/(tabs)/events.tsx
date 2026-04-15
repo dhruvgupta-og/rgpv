@@ -1,6 +1,6 @@
 import {
   StyleSheet, Text, View, FlatList, Platform, TouchableOpacity, Modal,
-  ScrollView, TextInput, Alert, ActivityIndicator,
+  ScrollView, TextInput, Alert, ActivityIndicator, Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useMemo, useState } from "react";
@@ -8,6 +8,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "@/lib/theme";
 import { apiRequest } from "@/lib/query-client";
+import { getStoredProfile, isStoredProfileComplete } from "@/lib/profile-storage";
 
 type RegField = { label: string; type: string; required: boolean };
 
@@ -23,6 +24,7 @@ type Event = {
   maxRegistrations?: number;
   registrationCount?: number;
   registrationFields?: RegField[];
+  posterUrl?: string;
 };
 
 export default function EventsScreen() {
@@ -35,6 +37,7 @@ export default function EventsScreen() {
   const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [registering, setRegistering] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [hasProfile, setHasProfile] = useState<boolean | null>(null);
 
   const { data: events = [], isLoading } = useQuery<Event[]>({
     queryKey: ["/api/events"],
@@ -42,10 +45,8 @@ export default function EventsScreen() {
 
   const registerMutation = useMutation({
     mutationFn: async ({ eventId, fields }: { eventId: string; fields: Record<string, string> }) => {
-      // find the first email/phone field as identifier
-      const event = events.find(e => e.id === eventId);
-      const identifierField = event?.registrationFields?.find(f => f.type === 'email' || f.type === 'phone');
-      const identifier = identifierField ? fields[identifierField.label] : '';
+      const profile = await getStoredProfile();
+      const identifier = profile?.email || "";
       const res = await apiRequest("POST", `/api/events/${eventId}/register`, { fields, identifier });
       return res.json();
     },
@@ -54,7 +55,14 @@ export default function EventsScreen() {
       queryClient.invalidateQueries({ queryKey: ["/api/events"] });
     },
     onError: (e: any) => {
-      Alert.alert("Registration Failed", e.message || "Please try again");
+      const message = String(e.message || "");
+      if (message.includes("Already registered") || message.includes("409")) {
+        Alert.alert("Already Registered", "You have already registered for this event.");
+      } else if (message.includes("full") || message.includes("400")) {
+        Alert.alert("Slots Full", "Sorry, this event is already full!");
+      } else {
+        Alert.alert("Registration Failed", e.message || "Please try again");
+      }
     },
   });
 
@@ -64,11 +72,14 @@ export default function EventsScreen() {
     return colors.primary;
   };
 
-  const openModal = (event: Event) => {
+  const openModal = async (event: Event) => {
     setSelectedEvent(event);
     setFormValues({});
     setSuccess(false);
     setRegistering(false);
+    
+    const profile = await getStoredProfile();
+    setHasProfile(isStoredProfileComplete(profile));
   };
 
   const closeModal = () => { setSelectedEvent(null); setSuccess(false); };
@@ -135,9 +146,10 @@ export default function EventsScreen() {
               <View style={styles.cardFooter}>
                 <Text style={[
                   styles.regStatus,
-                  { color: item.registrationOpen === false ? colors.textMuted : colors.accent }
+                  { color: (item.registrationOpen === false || (item.maxRegistrations && item.registrationCount && item.registrationCount >= item.maxRegistrations)) ? colors.textMuted : colors.accent }
                 ]}>
-                  {item.registrationOpen === false ? 'Registration Closed' : 'Registration Open'}
+                  {item.registrationOpen === false ? 'Registration Closed' : 
+                   (item.maxRegistrations && item.registrationCount && item.registrationCount >= item.maxRegistrations) ? 'Slots Full' : 'Registration Open'}
                 </Text>
                 {item.maxRegistrations ? (
                   <Text style={styles.metaText}>
@@ -170,6 +182,15 @@ export default function EventsScreen() {
               </View>
 
               <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }}>
+                {selectedEvent.posterUrl ? (
+                  <View style={styles.posterWrap}>
+                    <Image 
+                      source={{ uri: selectedEvent.posterUrl }} 
+                      style={styles.poster} 
+                      resizeMode="cover"
+                    />
+                  </View>
+                ) : null}
                 {success ? (
                   <View style={styles.successBox}>
                     <Ionicons name="checkmark-circle" size={48} color={colors.accent} />
@@ -196,10 +217,31 @@ export default function EventsScreen() {
                     ) : null}
 
                     {selectedEvent.registrationOpen === false ? (
-                      <View style={[styles.infoRow, { marginTop: 20 }]}>
-                        <Text style={{ color: colors.textMuted, textAlign: 'center', flex: 1 }}>
-                          Registration for this event is closed.
+                      <View style={[styles.infoRow, { marginTop: 20, backgroundColor: colors.backgroundLight, padding: 16, borderRadius: 12 }]}>
+                        <Ionicons name="lock-closed" size={20} color={colors.textMuted} style={{ marginRight: 8 }} />
+                        <Text style={{ color: colors.textMuted, fontFamily: 'Inter_600SemiBold', fontSize: 14 }}>
+                          Registration Closed
                         </Text>
+                      </View>
+                    ) : selectedEvent.maxRegistrations && (selectedEvent.registrationCount || 0) >= selectedEvent.maxRegistrations ? (
+                      <View style={[styles.infoRow, { marginTop: 20, backgroundColor: colors.danger + '15', padding: 16, borderRadius: 12 }]}>
+                        <Ionicons name="alert-circle" size={20} color={colors.danger} style={{ marginRight: 8 }} />
+                        <Text style={{ color: colors.danger, fontFamily: 'Inter_600SemiBold', fontSize: 14 }}>
+                          Slots are full now!
+                        </Text>
+                      </View>
+                    ) : !hasProfile ? (
+                      <View style={[styles.infoRow, { marginTop: 20, flexDirection: 'column', gap: 12, backgroundColor: colors.primary + '10', padding: 16, borderRadius: 12 }]}>
+                        <Ionicons name="person-circle-outline" size={32} color={colors.primary} />
+                        <Text style={{ color: colors.text, fontFamily: 'Inter_600SemiBold', textAlign: 'center' }}>
+                          Profile Required to Register
+                        </Text>
+                        <Text style={{ color: colors.textSecondary, fontSize: 12, textAlign: 'center', marginBottom: 8 }}>
+                          Please complete your profile details first.
+                        </Text>
+                        <TouchableOpacity style={[styles.btn, { width: '100%' }]} onPress={() => { closeModal(); router.push('/profile'); }}>
+                          <Text style={styles.btnText}>Complete Profile</Text>
+                        </TouchableOpacity>
                       </View>
                     ) : (
                       <>
@@ -290,5 +332,7 @@ function makeStyles(colors: any) {
     btn: { backgroundColor: colors.primary, borderRadius: 12, padding: 14, alignItems: 'center' },
     btnText: { fontFamily: 'Inter_600SemiBold', fontSize: 15, color: '#fff' },
     successBox: { alignItems: 'center', paddingVertical: 40 },
+    posterWrap: { width: '100%', aspectRatio: 16/9, borderRadius: 12, overflow: 'hidden', marginBottom: 16, backgroundColor: colors.backgroundLight },
+    poster: { width: '100%', height: '100%' },
   });
 }

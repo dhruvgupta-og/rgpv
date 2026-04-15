@@ -40,6 +40,53 @@ async function uploadPdfToFirebase(file: Express.Multer.File) {
   return url;
 }
 
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only images are allowed"));
+    }
+  },
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+});
+
+async function uploadImageToFirebase(file: Express.Multer.File) {
+  const safeName = file.originalname.replace(/[^a-zA-Z0-9_.-]/g, "_");
+  const fileName = `posters/${Date.now()}-${safeName}`;
+  const { getStorage } = require("firebase-admin/storage");
+  
+  const project = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || "rgpv-01";
+  const bucketNames = [
+    process.env.FIREBASE_STORAGE_BUCKET,
+    `${project}.firebasestorage.app`,
+    `${project}.appspot.com`,
+  ].filter(Boolean) as string[];
+
+  let lastErr: any;
+  for (const name of [...new Set(bucketNames)]) {
+    try {
+      console.log(`Attempting upload to bucket: ${name}`);
+      const bucket = getStorage().bucket(name);
+      await bucket.file(fileName).save(file.buffer, {
+        contentType: file.mimetype,
+        resumable: false,
+      });
+      const [url] = await bucket.file(fileName).getSignedUrl({
+        action: "read",
+        expires: "2036-01-01",
+      });
+      return url;
+    } catch (e: any) {
+      lastErr = e;
+      if (e.message?.includes("bucket does not exist")) continue;
+      throw e;
+    }
+  }
+  throw lastErr;
+}
+
 function normalizePdfLink(raw?: string) {
   if (!raw) return raw;
   const url = raw.trim();
@@ -258,6 +305,88 @@ function createProfilesWorkbook(header: string[], rows: string[][]) {
     { name: "xl/worksheets/sheet1.xml", content: sheetXml },
   ]);
 }
+
+// Multi-sheet workbook: sheets = [{ name, header, rows }]
+function createMultiSheetWorkbook(sheets: { name: string; header: string[]; rows: string[][] }[]) {
+  const safeSheetName = (name: string, idx: number) =>
+    (name || `Sheet${idx + 1}`).replace(/[\\/*?:[\]]/g, "").slice(0, 31);
+
+  const filesArr: { name: string; content: string }[] = [];
+
+  // Build each sheet XML
+  const sheetEntries = sheets.map((sheet, idx) => {
+    const allRows = [sheet.header, ...sheet.rows];
+    const sheetRows = allRows.map((row, rowIdx) => {
+      const cells = row.map((cell, cellIdx) => {
+        const ref = `${excelColumnName(cellIdx + 1)}${rowIdx + 1}`;
+        return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${htmlEscape(String(cell ?? ""))}</t></is></c>`;
+      }).join("");
+      return `<row r="${rowIdx + 1}">${cells}</row>`;
+    }).join("");
+    const sheetXml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+      `<sheetData>${sheetRows}</sheetData></worksheet>`;
+    filesArr.push({ name: `xl/worksheets/sheet${idx + 1}.xml`, content: sheetXml });
+    return { safeName: safeSheetName(sheet.name, idx), id: idx + 1 };
+  });
+
+  // workbook.xml — lists all sheets
+  const sheetsXml = sheetEntries.map(s => `<sheet name="${htmlEscape(s.safeName)}" sheetId="${s.id}" r:id="rId${s.id}"/>`).join("");
+  const workbookXml =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+    `<sheets>${sheetsXml}</sheets></workbook>`;
+
+  // workbook.xml.rels — references each sheet + styles
+  const relEntries = sheetEntries.map(s =>
+    `<Relationship Id="rId${s.id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${s.id}.xml"/>`
+  ).join("") +
+    `<Relationship Id="rId${sheetEntries.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>`;
+  const workbookRelsXml =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${relEntries}</Relationships>`;
+
+  const rootRelsXml =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+    `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>` +
+    `</Relationships>`;
+
+  const stylesXml =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+    `<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>` +
+    `<fills count="1"><fill><patternFill patternType="none"/></fill></fills>` +
+    `<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>` +
+    `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>` +
+    `<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>` +
+    `<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>` +
+    `</styleSheet>`;
+
+  const sheetOverrides = sheetEntries.map(s =>
+    `<Override PartName="/xl/worksheets/sheet${s.id}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`
+  ).join("");
+  const contentTypesXml =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+    `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
+    `<Default Extension="xml" ContentType="application/xml"/>` +
+    `<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>` +
+    `${sheetOverrides}` +
+    `<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>` +
+    `</Types>`;
+
+  return createZip([
+    { name: "[Content_Types].xml", content: contentTypesXml },
+    { name: "_rels/.rels", content: rootRelsXml },
+    { name: "xl/workbook.xml", content: workbookXml },
+    { name: "xl/_rels/workbook.xml.rels", content: workbookRelsXml },
+    { name: "xl/styles.xml", content: stylesXml },
+    ...filesArr,
+  ]);
+}
+
 
 function normalizeBranchId(raw?: string) {
   return (raw || "").trim().toLowerCase();
@@ -747,6 +876,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
+  app.post("/api/admin/upload-image", requireAdmin, imageUpload.single("image"), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: "No image provided" });
+      console.log("Uploading image to bucket:", process.env.FIREBASE_STORAGE_BUCKET);
+      const url = await uploadImageToFirebase(req.file);
+      res.json({ url });
+    } catch (e: any) {
+      console.error("Upload error:", e);
+      res.status(500).json({ error: e.message }); 
+    }
+  });
+
   // ---- EVENT REGISTRATIONS ----
   app.get("/api/events/:eventId/registrations", requireAdmin, async (req: Request, res: Response) => {
     try {
@@ -774,6 +915,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
+  app.get("/api/events/:eventId/registrations/export.xlsx", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const event = await storage.getEvent(req.params.eventId) as any;
+      const regs = await storage.getEventRegistrations(req.params.eventId) as any[];
+      if (!regs.length) return res.status(204).send();
+      const fields = event?.registrationFields?.map((f: any) => f.label) || [];
+      const header = ["#", "Registered At", ...fields];
+      const rows = regs.map((r, i) => [
+        String(i + 1),
+        r.createdAt ? new Date(r.createdAt).toLocaleString("en-IN") : "",
+        ...fields.map((f: string) => String(r.fields?.[f] ?? "")),
+      ]);
+      const workbook = createProfilesWorkbook(header, rows);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="registrations-${req.params.eventId}.xlsx"`);
+      res.send(workbook);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
   app.post("/api/events/:eventId/register", async (req: Request, res: Response) => {
     try {
       const event = await storage.getEvent(req.params.eventId) as any;
@@ -781,7 +941,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (event.maxRegistrations && event.registrationCount >= event.maxRegistrations) {
         return res.status(400).json({ error: "Event is full" });
       }
-      const identifier = req.body.identifier || req.body.fields?.Email || req.body.fields?.Phone || "";
+      let identifier = req.body.identifier || "";
+      if (!identifier && req.body.fields) {
+        const fields = req.body.fields;
+        const entry = Object.entries(fields).find(([k]) => 
+          /email|phone|mobile|whatsapp|contact|enrollment|username/i.test(k)
+        );
+        if (entry && entry[1]) identifier = String(entry[1]).trim().toLowerCase();
+      }
+
       if (identifier) {
         const already = await storage.checkEventRegistration(req.params.eventId, identifier);
         if (already) return res.status(409).json({ error: "Already registered" });

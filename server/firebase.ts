@@ -37,10 +37,9 @@ export function getFirestore() {
 
 export function getStorageBucket() {
   initFirebase();
-  if (!process.env.FIREBASE_STORAGE_BUCKET) {
-    throw new Error("FIREBASE_STORAGE_BUCKET is not set");
-  }
-  return getAdminStorage().bucket();
+  const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
+  const bucket = getAdminStorage().bucket(bucketName);
+  return bucket;
 }
 
 export const FieldValue = AdminFieldValue;
